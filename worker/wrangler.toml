@@ -1,0 +1,12 @@
+name = "panel-303"
+main = "src/index.ts"
+compatibility_date = "2025-10-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://cybr303.github.io,http://localhost:5173"
+TIMEZONE = "Europe/Madrid"
+
+# Secrets (set in the Cloudflare dashboard or with `wrangler secret put`, never here):
+#   NOTION_TOKEN    Notion personal access token
+#   PIN             the short PIN that unlocks the panel
+#   SESSION_SECRET  long random string used to sign session tokens
