@@ -28,7 +28,7 @@ iPhone (PWA en GitHub Pages)  ──PIN──▶  Cloudflare Worker  ──▶  
    repo público cybr303/panel-303         (guarda secretos)  ──▶  Microsoft Graph (Excel en OneDrive)
                                                              ──▶  Open-Meteo (tiempo, sin clave)
 ```
-- **Frontend:** estático, servido por GitHub Pages desde `cybr303/panel-303`. Es una PWA con manifest, icono "303", pantalla completa y modo oscuro. Vite + TypeScript sin framework (`web/`). GitHub Actions publica en cada push a `main` (`.github/workflows/pages.yml`); la URL del Worker llega con la variable de repositorio `API_URL`.
+- **Frontend:** estático, servido por GitHub Pages desde `cybr303/panel-303`. Es una PWA con manifest, icono "303", pantalla completa y modo oscuro. Vite + TypeScript sin framework (`web/`). GitHub Actions publica en cada push a `main` (`.github/workflows/pages.yml`); la URL del Worker está en `web/src/config.ts` (se puede cambiar con `VITE_API_URL`).
 - **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`. Guarda el token de Notion, las credenciales de Microsoft y el PIN como *secrets*. Expone una API mínima y propia para el panel.
 - **Acceso:** PIN corto. El Worker devuelve un token de sesión que el iPhone guarda. Sin PIN no se devuelve ningún dato.
 - **Actualización:** al abrir la app, al volver a ella y cada pocos minutos mientras está abierta.
@@ -132,7 +132,8 @@ Basado en el estilo «Reflect Notes» (`DESIGN.md` del cliente), solo en oscuro,
 ## Pendiente
 - [x] Repositorio `cybr303/panel-303` conectado a la sesión
 - [x] Cuenta de Cloudflare
-- [ ] Desplegar el Worker y guardar sus secretos (NOTION_TOKEN, PIN, SESSION_SECRET)
-- [ ] Activar GitHub Pages (Settings → Pages → Source: GitHub Actions) y la variable `API_URL`
+- [x] Desplegar el Worker: `https://panel-303.panel-303-worker.workers.dev` (fijada en `web/src/config.ts`; `API_URL` ya no hace falta)
+- [ ] Guardar los secretos del Worker en Cloudflare (NOTION_TOKEN, PIN, SESSION_SECRET)
+- [ ] Activar GitHub Pages (Settings → Pages → Source: GitHub Actions)
 - [ ] Excel movido a OneDrive (si falla, plan B: Google Sheets)
 - [ ] Crear la hoja «Suscripciones» en el Excel
