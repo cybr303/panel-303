@@ -30,12 +30,14 @@ export interface Priority { id: string; name: string; order: number; done: boole
 export interface AgendaItem { start: string | null; end: string | null; title: string; kind: "Class" | "Event" | "Exam" | "Assignment" }
 export interface Upcoming { title: string; date: string; kind: "Exam" | "Assignment" }
 export interface Goal { id: string; name: string; kind: string; status: string; tracking: string; habit: string | null; target: number | null; source: string; due: string | null; progress: number | null; children: Goal[] }
+export interface Money { status: "not-configured" | "not-connected" | "connected"; sheets?: string[]; hasSubscriptions?: boolean }
 export interface Summary {
   today: string;
   habits: Section<{ habits: Habit[]; hasTodayRow: boolean }>;
   top3: Section<Priority[]>;
   agenda: Section<{ items: AgendaItem[]; upcoming: Upcoming[]; scheduleOk: boolean }>;
   goals: Section<Goal[]>;
+  money?: Section<Money>;
   generatedAt: string;
 }
 
@@ -45,5 +47,6 @@ export const api = {
   setHabit: (prop: string, done: boolean) => request("POST", "/api/habit", { prop, done }),
   setPriority: (id: string, done: boolean) => request("POST", "/api/top3/done", { id, done }),
   addPriority: (name: string) => request("POST", "/api/top3", { name }),
+  msConnect: () => request<{ url: string }>("POST", "/api/ms/connect", {}),
   setGoal: (id: string, status: string) => request("POST", "/api/goal", { id, status }),
 };

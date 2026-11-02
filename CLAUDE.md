@@ -29,7 +29,7 @@ iPhone (PWA en GitHub Pages)  ──PIN──▶  Cloudflare Worker  ──▶  
                                                              ──▶  Open-Meteo (tiempo, sin clave)
 ```
 - **Frontend:** estático, servido por GitHub Pages desde `cybr303/panel-303`. Es una PWA con manifest, icono "303", pantalla completa y modo oscuro. Vite + TypeScript sin framework (`web/`). GitHub Actions publica en cada push a `main` (`.github/workflows/pages.yml`); la URL del Worker está en `web/src/config.ts` (se puede cambiar con `VITE_API_URL`).
-- **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`. Guarda el token de Notion, las credenciales de Microsoft y el PIN como *secrets*. Expone una API mínima y propia para el panel.
+- **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `POST /api/ms/connect`, `GET /api/ms/callback`, `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`. Guarda el token de Notion, las credenciales de Microsoft y el PIN como *secrets*. Expone una API mínima y propia para el panel.
 - **Acceso:** PIN corto. El Worker devuelve un token de sesión que el iPhone guarda. Sin PIN no se devuelve ningún dato.
 - **Actualización:** al abrir la app, al volver a ella y cada pocos minutos mientras está abierta.
 
@@ -76,6 +76,7 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 - Son las 3 prioridades **del día**. Se pueden escribir en Notion o en la app, y la app solo marca o desmarca `Done`.
 
 ### Excel · Finanzas_2026.xlsx (OneDrive, vía Microsoft Graph)
+- Acceso: app de Microsoft (cuentas personales, permisos `Files.ReadWrite` + `offline_access`). Secretos `MS_CLIENT_ID` y `MS_CLIENT_SECRET`. 303 da permiso una vez desde Money → Connect OneDrive; el refresh token (rota en cada uso) y el id del archivo se guardan en el KV `MS_STORE`. El enlace de compartir del Excel no se usa ni se guarda.
 - Solo se escribe en **Movimientos** (fila 7 en adelante). Columnas: Fecha · Tipo · Categoría · Concepto · Importe (€, siempre positivo) · Cuenta origen · Cuenta destino · Notas.
 - Tipos: Ingreso, Gasto, Traspaso, Inversión, Cartera, Ajuste. Las categorías y cuentas válidas salen de la hoja **Config**, nunca se escriben a mano en el código.
 - Valores por defecto del formulario: cuenta **Personal**. Todo lo demás se elige de listas.
@@ -135,5 +136,8 @@ Basado en el estilo «Reflect Notes» (`DESIGN.md` del cliente), solo en oscuro,
 - [x] Desplegar el Worker: `https://panel-303.panel-303-worker.workers.dev` (fijada en `web/src/config.ts`; `API_URL` ya no hace falta)
 - [x] Guardar los secretos del Worker en Cloudflare (NOTION_TOKEN, PIN, SESSION_SECRET)
 - [x] Activar GitHub Pages (Settings → Pages → Source: GitHub Actions)
-- [ ] Excel movido a OneDrive (si falla, plan B: Google Sheets)
+- [x] Excel movido a OneDrive (si falla, plan B: Google Sheets)
+- [ ] Registrar la app de Microsoft y guardar MS_CLIENT_ID / MS_CLIENT_SECRET
+- [ ] Conectar OneDrive desde la app y comprobar que Graph deja leer el Excel de una cuenta personal
+- [ ] Lectores de cada hoja y + Add (necesita la distribución exacta de celdas del Excel)
 - [ ] Crear la hoja «Suscripciones» en el Excel

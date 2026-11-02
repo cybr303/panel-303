@@ -23,21 +23,41 @@ function same(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export async function issueToken(secret: string): Promise<string> {
-  const payload = b64url(enc.encode(JSON.stringify({ exp: Date.now() + SESSION_DAYS * 86_400_000 })));
+async function sign(secret: string, body: Record<string, unknown>): Promise<string> {
+  const payload = b64url(enc.encode(JSON.stringify(body)));
   return `${payload}.${await hmac(secret, payload)}`;
 }
 
-export async function verifyToken(secret: string, token: string | null): Promise<boolean> {
-  if (!token) return false;
+async function open(secret: string, token: string | null): Promise<Record<string, unknown> | null> {
+  if (!token) return null;
   const [payload, sig] = token.split(".");
-  if (!payload || !sig || !same(sig, await hmac(secret, payload))) return false;
+  if (!payload || !sig || !same(sig, await hmac(secret, payload))) return null;
   try {
-    const { exp } = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-    return typeof exp === "number" && exp > Date.now();
+    const body = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof body.exp === "number" && body.exp > Date.now() ? body : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function issueToken(secret: string): Promise<string> {
+  return sign(secret, { exp: Date.now() + SESSION_DAYS * 86_400_000 });
+}
+
+/** Session tokens only: purpose-bound tokens (like the OneDrive sign-in state) are rejected here. */
+export async function verifyToken(secret: string, token: string | null): Promise<boolean> {
+  const body = await open(secret, token);
+  return !!body && body.p === undefined;
+}
+
+/** Short-lived token that ties a Microsoft sign-in back to an unlocked panel. */
+export function issueState(secret: string): Promise<string> {
+  return sign(secret, { exp: Date.now() + 10 * 60_000, p: "ms" });
+}
+
+export async function verifyState(secret: string, state: string | null): Promise<boolean> {
+  const body = await open(secret, state);
+  return !!body && body.p === "ms";
 }
 
 // Simple brute-force brake per worker instance: after 5 wrong PINs from an IP, wait 10 minutes.

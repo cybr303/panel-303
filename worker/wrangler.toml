@@ -10,3 +10,10 @@ TIMEZONE = "Europe/Madrid"
 #   NOTION_TOKEN    Notion personal access token
 #   PIN             the short PIN that unlocks the panel
 #   SESSION_SECRET  long random string used to sign session tokens
+#   MS_CLIENT_ID    Microsoft app (client) id, for the Excel in OneDrive
+#   MS_CLIENT_SECRET  Microsoft app client secret
+
+# Keeps the Microsoft refresh token (it rotates on every use) and the workbook id. Not secret by itself.
+[[kv_namespaces]]
+binding = "MS_STORE"
+id = "37bac4ac99f9424390b23d7417fe455a"

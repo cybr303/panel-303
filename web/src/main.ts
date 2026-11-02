@@ -119,7 +119,7 @@ function view(d: Summary) {
   switch (state.tab) {
     case "today": return todayView(d);
     case "habits": return habitsView(d);
-    case "money": return moneyView();
+    case "money": return moneyView(d);
     case "year": return yearView(d);
   }
 }
@@ -182,9 +182,23 @@ function habitsView(d: Summary) {
   </div></section>`;
 }
 
-function moneyView() {
-  return `<section class="stack"><div class="card"><div class="card-h"><h2>Money</h2><span class="pill">Phase 2</span></div>
-    <div class="sub">Net worth, monthly budget, savings goal, upcoming charges and the + Add button arrive once the Excel is on OneDrive.</div></div></section>`;
+function moneyView(d: Summary) {
+  const m = d.money;
+  if (!m) return `<section class="stack">${errorCard("Money", "The server has not been updated yet.")}</section>`;
+  if (!m.ok) return `<section class="stack">${errorCard("Money", m.error)}</section>`;
+  const { status, sheets = [], hasSubscriptions } = m.data;
+  let body: string;
+  if (status === "not-configured") {
+    body = `<div class="sub">The Microsoft app is not set up on the server yet.</div>`;
+  } else if (status === "not-connected") {
+    body = `<div class="sub">Connect your OneDrive once so the panel can read the finance workbook.</div>
+      <p><button class="btn" data-act="ms-connect">Connect OneDrive</button></p>`;
+  } else {
+    body = `<div class="sub">OneDrive connected · ${sheets.length} sheets found.</div>
+      <div class="sub">Net worth, budget, savings goal, balances and + Add arrive in the next update.</div>
+      ${hasSubscriptions ? "" : `<div class="err">Sheet “Suscripciones” not found: upcoming charges will stay empty until it exists.</div>`}`;
+  }
+  return `<section class="stack"><div class="card"><div class="card-h"><h2>Money</h2><span class="pill">${status === "connected" ? "Connected" : "Setup"}</span></div>${body}</div></section>`;
 }
 
 function goalRow(g: Goal): string {
@@ -258,6 +272,16 @@ app.addEventListener("click", async (e) => {
     return;
   }
   if (el.dataset.act === "refresh") return refresh(true);
+  if (el.dataset.act === "ms-connect") {
+    (el as HTMLButtonElement).disabled = true;
+    try {
+      location.href = (await api.msConnect()).url;
+    } catch (err) {
+      (el as HTMLButtonElement).disabled = false;
+      toast((err as Error).message);
+    }
+    return;
+  }
 
   if (el.dataset.habit && d.habits.ok) {
     const h = d.habits.data.habits.find((x) => x.prop === el.dataset.habit)!;
