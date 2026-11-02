@@ -1,6 +1,7 @@
 import { DS, HABITS, HISTORY_DAYS, SCHOOL_PAGE } from "./config";
-import { addDays, weekday } from "./dates";
+import { addDays, mondayOf, weekday } from "./dates";
 import { Block, Notion, Page, checkbox, dateStart, num, relationIds, richTextPlain, select, text } from "./notion";
+import { habitStats } from "./stats";
 import { computeStreak, StreakResult } from "./streaks";
 
 // ---------- Habits ----------
@@ -21,6 +22,13 @@ export async function getHabits(n: Notion, today: string) {
     sorts: [{ property: "Date", direction: "ascending" }],
   });
   const todayRow = rows.find((r) => dateStart(r.properties.Date)?.slice(0, 10) === today) ?? null;
+  const doneByDate = new Map<string, number>();
+  for (const r of rows) {
+    const d = dateStart(r.properties.Date)?.slice(0, 10);
+    if (d) doneByDate.set(d, HABITS.filter((h) => checkbox(r.properties[h.prop])).length);
+  }
+  const weekStart = mondayOf(today);
+  const weekRows = new Set(rows.map((r) => dateStart(r.properties.Date)?.slice(0, 10)).filter((d): d is string => !!d && d >= weekStart));
   const habits: HabitOut[] = HABITS.map((h) => {
     const checked = new Set<string>();
     for (const r of rows) {
@@ -30,19 +38,19 @@ export async function getHabits(n: Notion, today: string) {
     const s = computeStreak(checked, h.target, from, today);
     return { ...h, ...s, doneToday: checked.has(today) };
   });
-  return { habits, todayRowId: todayRow?.id ?? null };
+  // Mon..Sun of this week: whether a Habit Tracker row exists to be marked.
+  const weekHasRow = Array.from({ length: 7 }, (_, i) => weekRows.has(addDays(weekStart, i)));
+  return { habits, todayRowId: todayRow?.id ?? null, weekHasRow, stats: habitStats(doneByDate, HABITS.length, today) };
 }
 
-export async function setHabit(n: Notion, today: string, prop: string, done: boolean) {
+/** Marks a habit on today or an earlier day of the current week. Never creates rows. */
+export async function setHabit(n: Notion, today: string, prop: string, done: boolean, date = today) {
   if (!HABITS.some((h) => h.prop === prop)) throw new BadRequest("Unknown habit");
-  const { todayRowId } = await getHabitsRowOnly(n, today);
-  if (!todayRowId) throw new BadRequest("There is no row for today in the Habit Tracker");
-  await n.updatePage(todayRowId, { [prop]: { checkbox: done } });
-}
-
-async function getHabitsRowOnly(n: Notion, today: string) {
-  const rows = await n.query(DS.habits, { filter: { property: "Date", date: { equals: today } } });
-  return { todayRowId: rows[0]?.id ?? null };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today || date < mondayOf(today))
+    throw new BadRequest("Only days of this week up to today can be marked");
+  const rows = await n.query(DS.habits, { filter: { property: "Date", date: { equals: date } } });
+  if (!rows[0]) throw new BadRequest(`There is no row for ${date} in the Habit Tracker`);
+  await n.updatePage(rows[0].id, { [prop]: { checkbox: done } });
 }
 
 // ---------- Top 3 ----------
@@ -195,7 +203,7 @@ export interface GoalOut {
   source: string;
   due: string | null;
   order: number;
-  /** 0..1, or null when it can't be measured yet (e.g. money before phase 2). */
+  /** 0..1, or null when it is tracked by hand (Manual). */
   progress: number | null;
   children: GoalOut[];
 }
@@ -238,8 +246,8 @@ export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Pro
       const h = habits.find((x) => x.prop === g.habit);
       g.progress = h ? Math.min(1, h.weeksMet / g.target) : null;
     } else {
-      // Manual goals show their status only; Money goals arrive with the Excel in phase 2.
-      g.progress = null; // Money: arrives with the Excel in phase 2
+      // Manual goals show their status only.
+      g.progress = null;
     }
   };
   roots.forEach(measure);

@@ -30,9 +30,11 @@ export interface Priority { id: string; name: string; order: number; done: boole
 export interface AgendaItem { start: string | null; end: string | null; title: string; kind: "Class" | "Event" | "Exam" | "Assignment" }
 export interface Upcoming { title: string; date: string; kind: "Exam" | "Assignment" }
 export interface Goal { id: string; name: string; kind: string; status: string; tracking: string; habit: string | null; target: number | null; source: string; due: string | null; progress: number | null; children: Goal[] }
+export interface DayCount { date: string; done: number | null }
+export interface HabitStats { days: DayCount[]; monthRate: number; perfectDays: number; bestWeekday: number | null }
 export interface Summary {
   today: string;
-  habits: Section<{ habits: Habit[]; hasTodayRow: boolean }>;
+  habits: Section<{ habits: Habit[]; hasTodayRow: boolean; weekHasRow?: boolean[]; stats?: HabitStats }>;
   top3: Section<Priority[]>;
   agenda: Section<{ items: AgendaItem[]; upcoming: Upcoming[]; scheduleOk: boolean }>;
   goals: Section<Goal[]>;
@@ -42,7 +44,7 @@ export interface Summary {
 export const api = {
   login: (pin: string) => request<{ token: string }>("POST", "/api/auth", { pin }),
   summary: () => request<Summary>("GET", "/api/summary"),
-  setHabit: (prop: string, done: boolean) => request("POST", "/api/habit", { prop, done }),
+  setHabit: (prop: string, done: boolean, date?: string) => request("POST", "/api/habit", { prop, done, date }),
   setPriority: (id: string, done: boolean) => request("POST", "/api/top3/done", { id, done }),
   addPriority: (name: string) => request("POST", "/api/top3", { name }),
   setGoal: (id: string, status: string) => request("POST", "/api/goal", { id, status }),

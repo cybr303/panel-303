@@ -73,7 +73,9 @@ export default {
         return json(
           {
             today,
-            habits: habits.ok ? { ok: true, data: { habits: habits.data.habits, hasTodayRow: !!habits.data.todayRowId } } : habits,
+            habits: habits.ok
+              ? { ok: true, data: { habits: habits.data.habits, hasTodayRow: !!habits.data.todayRowId, weekHasRow: habits.data.weekHasRow, stats: habits.data.stats } }
+              : habits,
             top3,
             agenda,
             goals,
@@ -87,7 +89,7 @@ export default {
       if (req.method === "POST") {
         const body = (await req.json().catch(() => ({}))) as Record<string, any>;
         if (path === "/api/habit") {
-          await setHabit(n, today, String(body.prop), !!body.done);
+          await setHabit(n, today, String(body.prop), !!body.done, body.date ? String(body.date) : today);
           return json({ ok: true }, 200, h);
         }
         if (path === "/api/top3/done") {
