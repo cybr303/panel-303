@@ -133,7 +133,7 @@ Basado en el estilo «Reflect Notes» (`DESIGN.md` del cliente), solo en oscuro,
 - [x] Repositorio `cybr303/panel-303` conectado a la sesión
 - [x] Cuenta de Cloudflare
 - [x] Desplegar el Worker: `https://panel-303.panel-303-worker.workers.dev` (fijada en `web/src/config.ts`; `API_URL` ya no hace falta)
-- [ ] Guardar los secretos del Worker en Cloudflare (NOTION_TOKEN, PIN, SESSION_SECRET)
-- [ ] Activar GitHub Pages (Settings → Pages → Source: GitHub Actions)
+- [x] Guardar los secretos del Worker en Cloudflare (NOTION_TOKEN, PIN, SESSION_SECRET)
+- [x] Activar GitHub Pages (Settings → Pages → Source: GitHub Actions)
 - [ ] Excel movido a OneDrive (si falla, plan B: Google Sheets)
 - [ ] Crear la hoja «Suscripciones» en el Excel
