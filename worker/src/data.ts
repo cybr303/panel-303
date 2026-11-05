@@ -1,8 +1,9 @@
-import { DS, HABITS, HISTORY_DAYS, SCHOOL_PAGE } from "./config";
+import { AREAS, COLLAGE_SIZE, DS, HABITS, HISTORY_DAYS, SCHOOL_PAGE } from "./config";
 import { addDays, mondayOf, weekday } from "./dates";
-import { Block, Notion, Page, checkbox, dateStart, num, relationIds, richTextPlain, select, text } from "./notion";
+import { Block, Notion, Page, checkbox, dateStart, fileUrl, num, relationIds, richTextPlain, select, text } from "./notion";
 import { habitStats } from "./stats";
 import { computeStreak, StreakResult } from "./streaks";
+import { pickToday, type Photo } from "./vision";
 
 // ---------- Habits ----------
 export interface HabitOut extends StreakResult {
@@ -200,6 +201,9 @@ export interface GoalOut {
   tracking: string;
   habit: string | null;
   target: number | null;
+  /** Manual goals: value reached so far (e.g. euros saved), updated by hand in Notion. */
+  current: number | null;
+  area: string | null;
   source: string;
   due: string | null;
   order: number;
@@ -221,6 +225,8 @@ export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Pro
       tracking: select(p.Tracking) ?? "Manual",
       habit: select(p.Habit),
       target: num(p.Target),
+      current: num(p.Current),
+      area: select(p.Area),
       source: text(p.Source),
       due: dateStart(p.Due),
       order: num(p.Order) ?? 99,
@@ -245,8 +251,11 @@ export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Pro
     } else if (g.tracking === "Habit" && g.habit && g.target) {
       const h = habits.find((x) => x.prop === g.habit);
       g.progress = h ? Math.min(1, h.weeksMet / g.target) : null;
+    } else if (g.target && g.current !== null) {
+      // Manual goal with a number to reach (e.g. euros saved for the house).
+      g.progress = Math.max(0, Math.min(1, g.current / g.target));
     } else {
-      // Manual goals show their status only.
+      // Other manual goals show their status only.
       g.progress = null;
     }
   };
@@ -259,6 +268,61 @@ export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Pro
 export async function setGoalStatus(n: Notion, id: string, status: string) {
   if (!["Not started", "In progress", "Done"].includes(status)) throw new BadRequest("Unknown status");
   await n.updatePage(id, { Status: { status: { name: status } } });
+}
+
+// ---------- Vision Board ----------
+function toPhoto(r: Page): Photo {
+  const p = r.properties;
+  return {
+    id: r.id,
+    name: text(p.Name),
+    area: select(p.Area),
+    inCollage: checkbox(p["In collage"]),
+    order: num(p.Order) ?? 99,
+    focus: (select(p.Focus) ?? "Center").toLowerCase(),
+    version: r.last_edited_time ?? "",
+  };
+}
+
+export async function getVision(n: Notion, today: string) {
+  const rows = await n.query(DS.vision, { filter: { property: "Active", checkbox: { equals: true } } });
+  const photos = rows.filter((r) => !!fileUrl(r.properties.Photo)).map(toPhoto);
+  return { ...pickToday(photos, AREAS, today, COLLAGE_SIZE), total: photos.length };
+}
+
+/** Downloads one Vision Board photo. Only rows of the Vision Board can be read this way. */
+export async function getPhotoFile(n: Notion, id: string): Promise<{ url: string; version: string }> {
+  if (!/^[0-9a-f-]{32,36}$/i.test(id)) throw new BadRequest("Unknown photo");
+  const page = await n.getPage(id);
+  if (page.parent?.data_source_id?.replace(/-/g, "") !== DS.vision.replace(/-/g, "")) throw new BadRequest("Unknown photo");
+  const url = fileUrl(page.properties.Photo);
+  if (!url) throw new BadRequest("This row has no photo");
+  return { url, version: page.last_edited_time };
+}
+
+// ---------- Learning roadmap ----------
+export interface LearningItem { id: string; name: string; status: string; type: string | null; start: string | null; target: string | null; link: string | null }
+
+export async function getLearning(n: Notion): Promise<LearningItem[]> {
+  const rows = await n.query(DS.learning);
+  const rank: Record<string, number> = { Done: 0, Learning: 1, Planned: 2 };
+  return rows
+    .map((r) => {
+      const p = r.properties;
+      return {
+        id: r.id,
+        name: text(p.Name),
+        status: select(p.Status) ?? "Planned",
+        type: select(p.Type),
+        start: dateStart(p.Start),
+        target: dateStart(p["Target date"]),
+        link: p.Link?.type === "url" ? p.Link.url ?? null : null,
+        order: num(p.Order) ?? 99,
+      };
+    })
+    .filter((x) => x.name)
+    .sort((a, b) => a.order - b.order || (rank[a.status] ?? 3) - (rank[b.status] ?? 3) || (a.target ?? a.start ?? "9").localeCompare(b.target ?? b.start ?? "9"))
+    .map(({ order: _o, ...x }) => x);
 }
 
 export class BadRequest extends Error {}

@@ -29,7 +29,10 @@ export interface Habit { prop: string; label: string; target: number; doneToday:
 export interface Priority { id: string; name: string; order: number; done: boolean }
 export interface AgendaItem { start: string | null; end: string | null; title: string; kind: "Class" | "Event" | "Exam" | "Assignment" }
 export interface Upcoming { title: string; date: string; kind: "Exam" | "Assignment" }
-export interface Goal { id: string; name: string; kind: string; status: string; tracking: string; habit: string | null; target: number | null; source: string; due: string | null; progress: number | null; children: Goal[] }
+export interface Goal { id: string; name: string; kind: string; status: string; tracking: string; habit: string | null; target: number | null; current: number | null; area: string | null; source: string; due: string | null; progress: number | null; children: Goal[] }
+export interface Photo { id: string; name: string; area: string | null; inCollage: boolean; order: number; focus: string; version: string }
+export interface Vision { collage: Photo[]; covers: Record<string, Photo | null>; total: number }
+export interface LearningItem { id: string; name: string; status: string; type: string | null; start: string | null; target: string | null; link: string | null }
 export interface DayCount { date: string; done: number | null }
 export interface HabitStats { days: DayCount[]; monthRate: number; perfectDays: number; bestWeekday: number | null }
 export interface Summary {
@@ -38,7 +41,18 @@ export interface Summary {
   top3: Section<Priority[]>;
   agenda: Section<{ items: AgendaItem[]; upcoming: Upcoming[]; scheduleOk: boolean }>;
   goals: Section<Goal[]>;
+  vision?: Section<Vision>;
+  learning?: Section<LearningItem[]>;
   generatedAt: string;
+}
+
+/** Downloads a Vision Board photo through the Worker (needs the session token). */
+export async function fetchPhoto(id: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}/api/photo?id=${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (res.status === 401) { setToken(null); throw new LockedError("Locked"); }
+  if (!res.ok) throw new Error("Photo unavailable");
+  return res.blob();
 }
 
 export const api = {

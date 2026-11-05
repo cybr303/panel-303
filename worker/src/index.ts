@@ -1,6 +1,6 @@
 import { checkPin, issueToken, pinLocked, verifyToken } from "./auth";
 import { todayIn } from "./dates";
-import { addTop3, BadRequest, getAgenda, getGoals, getHabits, getTop3, setGoalStatus, setHabit, setTop3Done } from "./data";
+import { addTop3, BadRequest, getAgenda, getGoals, getHabits, getLearning, getPhotoFile, getTop3, getVision, setGoalStatus, setHabit, setTop3Done } from "./data";
 import { Notion, NotionError } from "./notion";
 
 export interface Env {
@@ -64,10 +64,12 @@ export default {
       const today = todayIn(env.TIMEZONE);
 
       if (path === "/api/summary" && req.method === "GET") {
-        const [habits, top3, agenda] = await Promise.all([
+        const [habits, top3, agenda, vision, learning] = await Promise.all([
           section(() => getHabits(n, today)),
           section(() => getTop3(n, today)),
           section(() => getAgenda(n, today, env.TIMEZONE)),
+          section(() => getVision(n, today)),
+          section(() => getLearning(n)),
         ]);
         const goals = await section(() => getGoals(n, today.slice(0, 4), habits.ok ? habits.data.habits : []));
         return json(
@@ -79,11 +81,29 @@ export default {
             top3,
             agenda,
             goals,
+            vision,
+            learning,
             generatedAt: new Date().toISOString(),
           },
           200,
           h,
         );
+      }
+
+      // Vision Board photo, streamed through the Worker so it is only visible after the PIN.
+      if (path === "/api/photo" && req.method === "GET") {
+        const id = url.searchParams.get("id") ?? "";
+        const { url: src, version } = await getPhotoFile(n, id);
+        const cacheKey = new Request(`https://photo-cache.panel-303/${id}?v=${encodeURIComponent(version)}`);
+        const cache = (caches as unknown as { default: Cache }).default;
+        let img = await cache.match(cacheKey);
+        if (!img) {
+          const r = await fetch(src);
+          if (!r.ok) throw new BadRequest("The photo could not be downloaded from Notion");
+          img = new Response(r.body, { headers: { "Content-Type": r.headers.get("Content-Type") ?? "image/jpeg", "Cache-Control": "max-age=604800" } });
+          await cache.put(cacheKey, img.clone());
+        }
+        return new Response(img.body, { headers: { ...h, "Content-Type": img.headers.get("Content-Type") ?? "image/jpeg", "Cache-Control": "private, max-age=86400" } });
       }
 
       if (req.method === "POST") {

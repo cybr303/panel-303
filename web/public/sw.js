@@ -1,6 +1,6 @@
 // App-shell cache: the app opens offline and shows the last saved data.
 // Data requests to the worker are never cached here (the app keeps its own copy).
-const CACHE = "p303-v1";
+const CACHE = "p303-v2";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["./", "manifest.webmanifest", "icons/icon-192.png"])));

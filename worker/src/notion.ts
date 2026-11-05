@@ -48,6 +48,10 @@ export class Notion {
     return out;
   }
 
+  getPage(pageId: string) {
+    return this.call<Page & { parent: { type: string; data_source_id?: string }; last_edited_time: string }>("GET", `/pages/${pageId}`);
+  }
+
   updatePage(pageId: string, properties: Record<string, unknown>) {
     return this.call<Page>("PATCH", `/pages/${pageId}`, { properties });
   }
@@ -75,6 +79,7 @@ export class Notion {
 export interface Page {
   id: string;
   url: string;
+  last_edited_time?: string;
   properties: Record<string, Prop>;
 }
 export type Prop = { type: string; [k: string]: any };
@@ -99,3 +104,9 @@ export const select = (p?: Prop): string | null =>
 export const num = (p?: Prop): number | null => (p && p.type === "number" ? p.number : null);
 export const relationIds = (p?: Prop): string[] => (p && p.type === "relation" ? p.relation.map((r: any) => r.id) : []);
 export const richTextPlain = (rt: any[] | undefined): string => (rt ?? []).map((t) => t.plain_text).join("").trim();
+
+/** First file of a "files" property: its download URL (Notion-hosted files expire after about an hour). */
+export const fileUrl = (p?: Prop): string | null => {
+  const f = p && p.type === "files" ? p.files?.[0] : null;
+  return f ? (f.type === "file" ? f.file?.url : f.external?.url) ?? null : null;
+};

@@ -1,7 +1,7 @@
 # panel-303
 
 ## Qué es
-Un "panel de vida" personal: una web app instalable en el iPhone (Safari → Añadir a pantalla de inicio) que muestra cómo va el día, los hábitos y sus rachas, el dinero y los objetivos del año, y permite escribir de vuelta (marcar hábitos, tachar prioridades, añadir movimientos).
+Un "dashboard de vida" personal: una web app instalable en el iPhone (Safari → Añadir a pantalla de inicio), pensada sobre todo para el PC. Arriba recuerda la vida a la que 303 aspira (collage de fotos del Vision Board) y debajo muestra el día, las áreas de vida, los hábitos y sus rachas, el roadmap de aprendizaje y los objetivos del año. Permite escribir de vuelta (marcar hábitos, tachar prioridades, marcar hitos).
 
 ## Para quién
 Un único usuario: **303**. Uso personal y privado, sobre todo desde el móvil y a lo largo de todo el día. No se diseña para nadie más.
@@ -13,15 +13,18 @@ Un único usuario: **303**. Uso personal y privado, sobre todo desde el móvil y
 - Conversación con el cliente en español. **Interfaz de la app en inglés.**
 
 ## Secciones (aprobadas)
-| Pestaña | Contenido |
-|---|---|
-| **Today** | Saludo, fecha, tiempo en Madrid, % del año, Top 3 (se tachan a mano), agenda del día (desde Notion), hábitos de hoy para marcar con un toque |
-| **Habits** | Cada hábito con icono y color propio (gama azul), casillas L–D de la semana (se pueden marcar hoy y los días anteriores de la semana), racha y récord; mapa de las últimas 20 semanas (día perfecto = azul cielo `#87ceff`); % cumplido del mes, días perfectos del mes y mejor día de la semana |
-| **Year** | Objetivos del año con progreso, sub-objetivos e hitos (base de datos Goals) |
+**PC (≥1024px), una sola pantalla con barra lateral** (Dashboard, Vision, Life areas, Habits, Learning, Goals saltan a cada bloque):
+1. **Cabecera:** saludo, fecha, tiempo en Madrid, % del año.
+2. **Vision:** collage de 8 fotos del Vision Board que **cambia cada día** (fijo durante el día). Encima, dos cifras: **% ahorrado para la casa** (objetivo «Save 18.000€ for the house», `Current`/`Target`) y **objetivos del año cumplidos**. Sin texto.
+3. **Today** (tarjeta azul marino): reloj, hábitos de hoy, mejor racha actual, % del mes y exámenes en 7 días. **Top 3** (tachar y añadir). **Agenda** (desde Notion).
+4. **Life areas:** Health & Gym · Career & Code · Money & Home · Apolo · Travel · Personal Growth. Cada una con una portada del Vision Board que **también rota cada día** entre las fotos de su área, y el progreso medio de sus objetivos (propiedad `Area` de Goals).
+5. **Habits:** icono y color propio (gama azul), casillas L–D (hoy y días anteriores de la semana), racha y récord; mapa de 20 semanas (día perfecto = azul cielo `#87ceff`); % del mes, días perfectos y mejor día.
+6. **Learning roadmap** (tarjeta azul marino): línea de tiempo desde la base Learning.
+7. **Goals:** objetivos del año con progreso e hitos.
 
-Descartado: Salud y Money (el dinero se queda en el Excel, fuera del panel).
+**Móvil:** 3 pestañas: Today (collage reducido, Today, Top 3, Agenda, hábitos de hoy), Habits, Life (áreas, objetivos, roadmap).
 
-**En PC (≥1024px)** todo cabe en una pantalla sin pestañas: Hábitos en la columna ancha; Top 3, Agenda y Objetivos en la lateral. En el móvil, 3 pestañas: Today, Habits, Year. Cualquier sección nueva se propone antes.
+Descartado: Salud y Money (el dinero se queda en el Excel, fuera del panel). Cualquier sección nueva se propone antes.
 
 ## Arquitectura
 ```
@@ -29,7 +32,7 @@ iPhone (PWA en GitHub Pages)  ──PIN──▶  Cloudflare Worker  ──▶  
    repo público cybr303/panel-303         (guarda secretos)  ──▶  Open-Meteo (tiempo, sin clave)
 ```
 - **Frontend:** estático, servido por GitHub Pages desde `cybr303/panel-303`. Es una PWA con manifest, icono "303", pantalla completa y modo oscuro. Vite + TypeScript sin framework (`web/`). GitHub Actions publica en cada push a `main` (`.github/workflows/pages.yml`); la URL del Worker está en `web/src/config.ts` (se puede cambiar con `VITE_API_URL`).
-- **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`. Guarda el token de Notion y el PIN como *secrets*. Expone una API mínima y propia para el panel.
+- **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `GET /api/photo?id=` (fotos del Vision Board, solo con sesión), `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`. Guarda el token de Notion y el PIN como *secrets*. Expone una API mínima y propia para el panel.
 - **Acceso:** PIN corto. El Worker devuelve un token de sesión que el iPhone guarda. Sin PIN no se devuelve ningún dato.
 - **Actualización:** al abrir la app, al volver a ella y cada pocos minutos mientras está abierta.
 
@@ -55,12 +58,21 @@ iPhone (PWA en GitHub Pages)  ──PIN──▶  Cloudflare Worker  ──▶  
 
 ### Notion · Goals (creada para este proyecto)
 - Data source: `collection://957d41f2-d432-4257-b9ae-70647426a4b4`, dentro de «˗ˏˋ life ´ˎ˗».
-- Propiedades: `Name`, `Year`, `Kind` (Goal / Sub-goal / Milestone), `Status`, `Tracking` (Habit / Milestones / Manual), `Habit`, `Target`, `Source`, `Order`, `Due`, `Notes`, `Parent` ↔ `Children`.
+- Propiedades: `Name`, `Year`, `Kind` (Goal / Sub-goal / Milestone), `Status`, `Tracking` (Habit / Milestones / Manual), `Area` (las 6 áreas), `Habit`, `Target`, `Current`, `Source`, `Order`, `Due`, `Notes`, `Parent` ↔ `Children`.
 - Progreso según `Tracking`:
   - **Habit:** semanas consecutivas que cumplen el objetivo, frente a `Target`.
   - **Milestones:** hijos con estado Done / total.
-  - **Manual:** su propio `Status`.
-- «Save up 5.000€» es `Manual` (el panel no lee el Excel).
+  - **Manual:** con `Target` y `Current`, `Current / Target` (303 actualiza `Current` a mano); si no, su propio `Status`.
+- «Save 18.000€ for the house» (`Money & Home`, Manual, Target 18000) alimenta la cifra de la zona Vision y la barra lateral. «Save up 5.000€» es `Manual`.
+
+### Notion · Vision Board (creada para este proyecto)
+- Data source: `collection://c78b26d1-8a4e-43f0-b64f-4f475c474a4f`, dentro de «˗ˏˋ life ´ˎ˗».
+- Propiedades: `Name`, `Photo` (archivo), `Area` (Vision + las 6 áreas), `In collage`, `Order`, `Active`, `Focus` (Center/Top/Bottom/Left/Right: qué parte de la foto se ve al recortarla; sirve para ocultar texto en imágenes de inspiración).
+- Solo se usan filas con `Active` y foto. Collage: fotos con `In collage`, 8 al día, elegidas con una semilla por fecha (`worker/src/vision.ts`, con tests). Portadas: una por área al día entre sus fotos; se excluyen del collage si hay suficientes.
+- Las fotos **nunca** van al repositorio: el Worker las descarga de Notion y las sirve solo con sesión; la web las pide con el token y las muestra como blob.
+
+### Notion · Learning (creada para este proyecto)
+- Data source: `collection://d2ed32fb-c9f1-4550-b91d-44e44868ff44`. Propiedades: `Name`, `Status` (Planned/Learning/Done), `Type`, `Start`, `Target date`, `Order`, `Link`, `Notes`.
 
 ### Notion · Agenda
 La agenda del día se lee de Notion, que es la fuente principal de todo. La automatización de 303 la copia a Google Calendar; la app no lee Calendar.
@@ -75,31 +87,27 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 - Son las 3 prioridades **del día**. Se pueden escribir en Notion o en la app, y la app solo marca o desmarca `Done`.
 
 ## Diseño
-Basado en el estilo «Reflect Notes» (`DESIGN.md` del cliente), solo en oscuro, con la paleta cambiada a azul:
+«Ice glass» claro (tono A aprobado), inspirado en las referencias de 303 (Planivo, iDraft, Tech Productivity Hub, Creative Code Studio). Guía y maqueta aprobadas: https://claude.ai/artifact/5XJvYqQewoDdp7Z1kmDauP
 
 | Token | Valor | Uso |
 |---|---|---|
-| `--void` | `#000814` | Fondo |
-| `--surface` | `#04101f` | Tarjetas |
-| `--raised` | `#0a1f45` | Paneles elevados, hover, botones secundarios |
-| `--text` | `#eef5ff` | Texto principal |
-| `--text-2` | `#a3adbf` | Texto secundario |
-| `--text-3` | `#8b93a5` | Metadatos |
-| `--steel` | `#4f5867` | Deshabilitado |
-| `--accent` | `#5b9dff` | Único acento |
-| `--accent-2` | `#2f6fe4` | Acento profundo y brillos |
-| `--gradient` | `#9ef0ff → #8cc4ff → #7f9cff` | Solo texto de acento y trazos finos, nunca rellenos grandes |
-| Hábitos | `#7fe3ff` `#5bc8ff` `#5b9dff` `#4fd3e6` `#7f9cff` `#8cc4ff` `#6d7dff` `#9a8cff` `#b3d4ff` | Un color por hábito, solo en su icono, casillas y texto de récord |
+| `--ice` | `#eaf1fa` + degradados radiales azul hielo | Fondo |
+| `--glass` | blanco 62% + blur 18px, borde blanco | Tarjetas por defecto |
+| `--deep` | `#0a1830` → `#12264a` | Solo 1–2 bloques clave (Today, Learning, elemento activo del menú), con brillo cian |
+| `--ink` / `--ink-2` / `--ink-3` | `#0b1b33` / `#44546e` / `#6b7b95` | Texto |
+| `--accent` | `#2f6fe4` | Acento único |
+| `--cyan` | `#3fd4ff` | Brillos y degradado de barras |
+| `--sky` | `#87ceff` | Día perfecto en el mapa, clases en la agenda |
+| Hábitos | `#1fb5e0` `#1a9be6` `#2f6fe4` `#14a8bd` `#5470e8` `#3d8fe0` `#4b55d6` `#7a63e6` `#5f8fd0` | Un color por hábito (icono, casillas, «Your best streak!») |
 
-- **Tipografía:** DM Sans 500 para títulos (sustituye a AeonikPro) e Inter 400/500 para el cuerpo. Cifras con `tabular-nums`.
-- **Superficies:** se separan con brillo interior en el borde (*rim light*), no con sombras ni bordes marcados. Radio de 16px en tarjetas y 5px en botones.
-- **Fondo:** estrellas sutiles (canvas), con `prefers-reduced-motion` respetado.
-- **Navegación:** barra inferior con 3 pestañas en el móvil y respeto de las *safe areas* del iPhone.
-- **Muestra aprobada:** https://claude.ai/artifact/S2GLhkzhJK1ZVSB3gGgYsF
+- **Tipografía:** DM Sans (títulos y cifras grandes), Inter (texto), JetBrains Mono (horas, fechas, ratios). Cifras con `tabular-nums`.
+- **Superficies:** cristal con sombra azul suave; radio 20px en tarjetas, 16px en fotos, 10px en botones. Progreso en anillos (una cifra grande) y barras (listas).
+- **Fotos:** las aporta 303 en el Vision Board; tonos fríos/azules y minimalistas encajan mejor.
+- **Navegación:** barra lateral en PC; barra inferior con 3 pestañas en el móvil, con *safe areas* del iPhone.
 
 ## Comandos
 - Web: `cd web && npm run dev` / `npm run build`
-- Worker: `cd worker && npm test` (regla de rachas en `src/streaks.test.ts`) / `npm run typecheck` / `npx wrangler deploy`
+- Worker: `cd worker && npm test` (rachas en `src/streaks.test.ts`, estadísticas en `src/stats.test.ts`, rotación del Vision Board en `src/vision.test.ts`) / `npm run typecheck` / `npx wrangler deploy`
 
 ## Reglas
 1. **Nunca** se suben datos personales, tokens, claves, PIN ni el Excel al repositorio. El repo es público.
@@ -108,6 +116,7 @@ Basado en el estilo «Reflect Notes» (`DESIGN.md` del cliente), solo en oscuro,
    - marcar o desmarcar un hábito de hoy o de un día anterior de la semana en curso;
    - tachar una prioridad del Top 3;
    - marcar hitos y objetivos;
+   - añadir una prioridad al Top 3 del día.
 
    Nada de borrar ni de crear filas en el Habit Tracker.
 4. No se modifica la estructura de las bases de datos de Notion existentes sin permiso.
@@ -120,4 +129,8 @@ Basado en el estilo «Reflect Notes» (`DESIGN.md` del cliente), solo en oscuro,
 - [x] Desplegar el Worker: `https://panel-303.panel-303-worker.workers.dev` (fijada en `web/src/config.ts`; `API_URL` ya no hace falta)
 - [x] Guardar los secretos del Worker en Cloudflare (NOTION_TOKEN, PIN, SESSION_SECRET)
 - [x] Activar GitHub Pages (Settings → Pages → Source: GitHub Actions)
-- [ ] Publicar la vista de PC y las funciones nuevas de Hábitos (rama `desktop-habits`): desplegar el Worker y luego pasar la web a `main`
+- [x] Vista de PC y funciones nuevas de Hábitos publicadas
+- [x] Bases Vision Board y Learning; `Area` y `Current` en Goals
+- [ ] Publicar el dashboard de vida (rama `life-dashboard`): desplegar el Worker y luego pasar la web a `main`
+- [ ] Comprobar que la integración de Notion tiene acceso a Vision Board y Learning
+- [ ] 303 sube sus fotos a Vision Board y rellena Learning y `Current` de la casa
