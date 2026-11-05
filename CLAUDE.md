@@ -67,7 +67,7 @@ iPhone (PWA en GitHub Pages)  ──PIN──▶  Cloudflare Worker  ──▶  
 
 ### Notion · Vision Board (creada para este proyecto)
 - Data source: `collection://c78b26d1-8a4e-43f0-b64f-4f475c474a4f`, dentro de «˗ˏˋ life ´ˎ˗».
-- Propiedades: `Name`, `Photo` (archivo), `Area` (Vision + las 6 áreas), `In collage`, `Order`, `Active`, `Focus` (Center/Top/Bottom/Left/Right: qué parte de la foto se ve al recortarla; sirve para ocultar texto en imágenes de inspiración).
+- Propiedades: `Name`, `Photo` (archivo; si está vacío se usa la primera imagen dentro de la página), `Area` (Vision + las 6 áreas), `In collage`, `Order`, `Active`, `Focus` (Center/Top/Bottom/Left/Right: qué parte de la foto se ve al recortarla; sirve para ocultar texto en imágenes de inspiración).
 - Solo se usan filas con `Active` y foto. Collage: fotos con `In collage`, 8 al día, elegidas con una semilla por fecha (`worker/src/vision.ts`, con tests). Portadas: una por área al día entre sus fotos; se excluyen del collage si hay suficientes.
 - Las fotos **nunca** van al repositorio: el Worker las descarga de Notion y las sirve solo con sesión; la web las pide con el token y las muestra como blob.
 

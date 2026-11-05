@@ -284,9 +284,28 @@ function toPhoto(r: Page): Photo {
   };
 }
 
+/** A Vision Board row's photo: the "Photo" property, or else the first image inside the page. */
+async function photoSource(n: Notion, r: Page): Promise<string | null> {
+  const prop = fileUrl(r.properties.Photo);
+  if (prop) return prop;
+  const img = (await n.children(r.id)).find((b) => b.type === "image");
+  return img ? (img.image.type === "file" ? img.image.file?.url : img.image.external?.url) ?? null : null;
+}
+
+// Rows edited since we last looked are checked again; others reuse the answer (per Worker instance).
+const hasPhotoCache = new Map<string, boolean>();
+
 export async function getVision(n: Notion, today: string) {
   const rows = await n.query(DS.vision, { filter: { property: "Active", checkbox: { equals: true } } });
-  const photos = rows.filter((r) => !!fileUrl(r.properties.Photo)).map(toPhoto);
+  const withPhoto = await Promise.all(
+    rows.map(async (r) => {
+      if (fileUrl(r.properties.Photo)) return true;
+      const key = `${r.id}@${r.last_edited_time}`;
+      if (!hasPhotoCache.has(key)) hasPhotoCache.set(key, !!(await photoSource(n, r)));
+      return hasPhotoCache.get(key)!;
+    }),
+  );
+  const photos = rows.filter((_, i) => withPhoto[i]).map(toPhoto);
   return { ...pickToday(photos, AREAS, today, COLLAGE_SIZE), total: photos.length };
 }
 
@@ -295,7 +314,7 @@ export async function getPhotoFile(n: Notion, id: string): Promise<{ url: string
   if (!/^[0-9a-f-]{32,36}$/i.test(id)) throw new BadRequest("Unknown photo");
   const page = await n.getPage(id);
   if (page.parent?.data_source_id?.replace(/-/g, "") !== DS.vision.replace(/-/g, "")) throw new BadRequest("Unknown photo");
-  const url = fileUrl(page.properties.Photo);
+  const url = await photoSource(n, page);
   if (!url) throw new BadRequest("This row has no photo");
   return { url, version: page.last_edited_time };
 }
