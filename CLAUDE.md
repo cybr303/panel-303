@@ -133,4 +133,5 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 - [x] Bases Vision Board y Learning; `Area` y `Current` en Goals
 - [ ] Publicar el dashboard de vida (rama `life-dashboard`): desplegar el Worker y luego pasar la web a `main`
 - [ ] Comprobar que la integración de Notion tiene acceso a Vision Board y Learning
-- [ ] 303 sube sus fotos a Vision Board y rellena Learning y `Current` de la casa
+- [x] 25 fotos subidas a Vision Board (imagen dentro de cada página) y `Current` de la casa = 900
+- [ ] 303 rellena la base Learning
