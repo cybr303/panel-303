@@ -131,7 +131,7 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 - [x] Activar GitHub Pages (Settings → Pages → Source: GitHub Actions)
 - [x] Vista de PC y funciones nuevas de Hábitos publicadas
 - [x] Bases Vision Board y Learning; `Area` y `Current` en Goals
-- [ ] Publicar el dashboard de vida (rama `life-dashboard`): desplegar el Worker y luego pasar la web a `main`
+- [x] Dashboard de vida publicado (Worker desplegado y web en `main`)
 - [ ] Comprobar que la integración de Notion tiene acceso a Vision Board y Learning
 - [x] 25 fotos subidas a Vision Board (imagen dentro de cada página) y `Current` de la casa = 900
 - [ ] 303 rellena la base Learning
