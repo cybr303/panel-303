@@ -1,6 +1,7 @@
 import { checkPin, issueToken, pinLocked, verifyToken } from "./auth";
 import { todayIn } from "./dates";
-import { addTop3, BadRequest, getAgenda, getGoals, getHabits, getLearning, getPhotoFile, getTop3, getVision, setGoalStatus, setHabit, setTop3Done } from "./data";
+import { addTop3, BadRequest, getAgenda, getGoals, getHabits, getLearning, getPhotoFile, getTop3, getVision, saveGoal, setGoalStatus, setHabit, setTop3Done } from "./data";
+import { InvalidGoal } from "./goals";
 import { Notion, NotionError } from "./notion";
 
 export interface Env {
@@ -126,11 +127,15 @@ export default {
           await setGoalStatus(n, String(body.id), String(body.status));
           return json({ ok: true }, 200, h);
         }
+        if (path === "/api/goal/save") {
+          const page = await saveGoal(n, today.slice(0, 4), body);
+          return json({ ok: true, id: page.id }, 200, h);
+        }
       }
 
       return json({ error: "Not found" }, 404, h);
     } catch (e) {
-      if (e instanceof BadRequest) return json({ error: e.message }, 400, h);
+      if (e instanceof BadRequest || e instanceof InvalidGoal) return json({ error: e.message }, 400, h);
       if (e instanceof NotionError) return json({ error: `Notion: ${e.message}` }, 502, h);
       return json({ error: "Server error" }, 500, h);
     }

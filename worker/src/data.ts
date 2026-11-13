@@ -4,6 +4,7 @@ import { Block, Notion, Page, checkbox, dateStart, fileUrl, num, relationIds, ri
 import { habitStats } from "./stats";
 import { computeStreak, StreakResult } from "./streaks";
 import { pickToday, type Photo } from "./vision";
+import { goalProperties, type GoalInput } from "./goals";
 
 // ---------- Habits ----------
 export interface HabitOut extends StreakResult {
@@ -206,6 +207,7 @@ export interface GoalOut {
   area: string | null;
   source: string;
   due: string | null;
+  notes: string;
   order: number;
   /** 0..1, or null when it is tracked by hand (Manual). */
   progress: number | null;
@@ -229,6 +231,7 @@ export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Pro
       area: select(p.Area),
       source: text(p.Source),
       due: dateStart(p.Due),
+      notes: text(p.Notes),
       order: num(p.Order) ?? 99,
       progress: null,
       children: [],
@@ -246,8 +249,9 @@ export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Pro
   const measure = (g: GoalOut): void => {
     g.children.forEach(measure);
     if (g.status === "Done") { g.progress = 1; return; }
-    if (g.tracking === "Milestones" && g.children.length) {
-      g.progress = g.children.filter((c) => c.status === "Done" || c.progress === 1).length / g.children.length;
+    const live = g.children.filter((c) => c.status !== "Archived");
+    if (g.tracking === "Milestones" && live.length) {
+      g.progress = live.filter((c) => c.status === "Done" || c.progress === 1).length / live.length;
     } else if (g.tracking === "Habit" && g.habit && g.target) {
       const h = habits.find((x) => x.prop === g.habit);
       g.progress = h ? Math.min(1, h.weeksMet / g.target) : null;
@@ -265,9 +269,38 @@ export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Pro
   return roots.map(clean);
 }
 
+/** Only rows of the Goals database can be changed from the panel. */
+async function assertGoal(n: Notion, id: string) {
+  if (!/^[0-9a-f-]{32,36}$/i.test(id)) throw new BadRequest("Unknown goal");
+  const page = await n.getPage(id);
+  if (page.parent?.data_source_id?.replace(/-/g, "") !== DS.goals.replace(/-/g, "")) throw new BadRequest("Unknown goal");
+}
+
 export async function setGoalStatus(n: Notion, id: string, status: string) {
-  if (!["Not started", "In progress", "Done"].includes(status)) throw new BadRequest("Unknown status");
-  await n.updatePage(id, { Status: { status: { name: status } } });
+  await assertGoal(n, id);
+  await n.updatePage(id, goalProperties({ status }, false));
+}
+
+/** Creates a goal (or a milestone when parentId is given) or updates an existing one. */
+export async function saveGoal(n: Notion, year: string, body: GoalInput & { id?: unknown; parentId?: unknown }) {
+  const { id, parentId, ...input } = body;
+  if (id) {
+    await assertGoal(n, String(id));
+    return n.updatePage(String(id), goalProperties(input, false));
+  }
+  const props = goalProperties(input, true);
+  const siblings = await n.query(DS.goals, { filter: { property: "Year", select: { equals: year } } });
+  props.Order = { number: siblings.reduce((m, r) => Math.max(m, num(r.properties.Order) ?? 0), 0) + 1 };
+  props.Year = { select: { name: year } };
+  if (parentId) {
+    await assertGoal(n, String(parentId));
+    props.Kind = { select: { name: "Milestone" } };
+    props.Parent = { relation: [{ id: String(parentId) }] };
+    props.Tracking = { select: { name: "Manual" } };
+  } else {
+    props.Kind = { select: { name: "Goal" } };
+  }
+  return n.createPage(DS.goals, props);
 }
 
 // ---------- Vision Board ----------

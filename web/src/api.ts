@@ -29,7 +29,7 @@ export interface Habit { prop: string; label: string; target: number; doneToday:
 export interface Priority { id: string; name: string; order: number; done: boolean }
 export interface AgendaItem { start: string | null; end: string | null; title: string; kind: "Class" | "Event" | "Exam" | "Assignment" }
 export interface Upcoming { title: string; date: string; kind: "Exam" | "Assignment" }
-export interface Goal { id: string; name: string; kind: string; status: string; tracking: string; habit: string | null; target: number | null; current: number | null; area: string | null; source: string; due: string | null; progress: number | null; children: Goal[] }
+export interface Goal { id: string; name: string; kind: string; status: string; tracking: string; habit: string | null; target: number | null; current: number | null; area: string | null; source: string; due: string | null; notes?: string; progress: number | null; children: Goal[] }
 export interface Photo { id: string; name: string; area: string | null; inCollage: boolean; order: number; focus: string; version: string }
 export interface Vision { collage: Photo[]; covers: Record<string, Photo | null>; total: number }
 export interface LearningItem { id: string; name: string; status: string; type: string | null; start: string | null; target: string | null; link: string | null }
@@ -61,5 +61,6 @@ export const api = {
   setHabit: (prop: string, done: boolean, date?: string) => request("POST", "/api/habit", { prop, done, date }),
   setPriority: (id: string, done: boolean) => request("POST", "/api/top3/done", { id, done }),
   addPriority: (name: string) => request("POST", "/api/top3", { name }),
+  saveGoal: (goal: Record<string, unknown>) => request<{ ok: true; id: string }>("POST", "/api/goal/save", goal),
   setGoal: (id: string, status: string) => request("POST", "/api/goal", { id, status }),
 };

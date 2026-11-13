@@ -20,7 +20,7 @@ Un único usuario: **303**. Uso personal y privado, sobre todo desde el móvil y
 4. **Life areas:** Health & Gym · Career & Code · Money & Home · Apolo · Travel · Personal Growth. Cada una con una portada del Vision Board que **también rota cada día** entre las fotos de su área, y el progreso medio de sus objetivos (propiedad `Area` de Goals).
 5. **Habits:** icono y color propio (gama azul), casillas L–D (hoy y días anteriores de la semana), racha y récord; mapa de 20 semanas (día perfecto = azul cielo `#87ceff`); % del mes, días perfectos y mejor día.
 6. **Learning roadmap** (tarjeta azul marino): línea de tiempo desde la base Learning.
-7. **Goals:** objetivos del año con progreso e hitos.
+7. **Goals:** objetivos del año con progreso e hitos. **Se crean y editan desde el panel** (panel lateral en PC, hoja inferior en el móvil): nombre, área, seguimiento (Number = `Current`/`Target`, Milestones, Habit, Status only), fecha, estado y notas; hitos (añadir, renombrar, marcar, quitar); archivar y recuperar. Cada tarjeta de área tiene «+ Add goal» con el área ya elegida.
 
 **Móvil:** 3 pestañas: Today (collage reducido, Today, Top 3, Agenda, hábitos de hoy), Habits, Life (áreas, objetivos, roadmap).
 
@@ -32,7 +32,7 @@ iPhone (PWA en GitHub Pages)  ──PIN──▶  Cloudflare Worker  ──▶  
    repo público cybr303/panel-303         (guarda secretos)  ──▶  Open-Meteo (tiempo, sin clave)
 ```
 - **Frontend:** estático, servido por GitHub Pages desde `cybr303/panel-303`. Es una PWA con manifest, icono "303", pantalla completa y modo oscuro. Vite + TypeScript sin framework (`web/`). GitHub Actions publica en cada push a `main` (`.github/workflows/pages.yml`); la URL del Worker está en `web/src/config.ts` (se puede cambiar con `VITE_API_URL`).
-- **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `GET /api/photo?id=` (fotos del Vision Board, solo con sesión), `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`. Guarda el token de Notion y el PIN como *secrets*. Expone una API mínima y propia para el panel.
+- **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `GET /api/photo?id=` (fotos del Vision Board, solo con sesión), `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`, `POST /api/goal/save` (crear o editar objetivos e hitos; solo filas de Goals, validado en `worker/src/goals.ts`). Guarda el token de Notion y el PIN como *secrets*. Expone una API mínima y propia para el panel.
 - **Acceso:** PIN corto. El Worker devuelve un token de sesión que el iPhone guarda. Sin PIN no se devuelve ningún dato.
 - **Actualización:** al abrir la app, al volver a ella y cada pocos minutos mientras está abierta.
 
@@ -58,7 +58,7 @@ iPhone (PWA en GitHub Pages)  ──PIN──▶  Cloudflare Worker  ──▶  
 
 ### Notion · Goals (creada para este proyecto)
 - Data source: `collection://957d41f2-d432-4257-b9ae-70647426a4b4`, dentro de «˗ˏˋ life ´ˎ˗».
-- Propiedades: `Name`, `Year`, `Kind` (Goal / Sub-goal / Milestone), `Status`, `Tracking` (Habit / Milestones / Manual), `Area` (las 6 áreas), `Habit`, `Target`, `Current`, `Source`, `Order`, `Due`, `Notes`, `Parent` ↔ `Children`.
+- Propiedades: `Name`, `Year`, `Kind` (Goal / Sub-goal / Milestone), `Status` (Not started / In progress / Done / Archived; los archivados no cuentan ni se muestran salvo «Show archived»), `Tracking` (Habit / Milestones / Manual), `Area` (las 6 áreas), `Habit`, `Target`, `Current`, `Source`, `Order`, `Due`, `Notes`, `Parent` ↔ `Children`.
 - Progreso según `Tracking`:
   - **Habit:** semanas consecutivas que cumplen el objetivo, frente a `Target`.
   - **Milestones:** hijos con estado Done / total.
@@ -107,7 +107,7 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 
 ## Comandos
 - Web: `cd web && npm run dev` / `npm run build`
-- Worker: `cd worker && npm test` (rachas en `src/streaks.test.ts`, estadísticas en `src/stats.test.ts`, rotación del Vision Board en `src/vision.test.ts`) / `npm run typecheck` / `npx wrangler deploy`
+- Worker: `cd worker && npm test` (rachas en `src/streaks.test.ts`, estadísticas en `src/stats.test.ts`, rotación del Vision Board en `src/vision.test.ts`, validación de objetivos en `src/goals.test.ts`) / `npm run typecheck` / `npx wrangler deploy`
 
 ## Reglas
 1. **Nunca** se suben datos personales, tokens, claves, PIN ni el Excel al repositorio. El repo es público.
@@ -115,7 +115,7 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 3. La app solo escribe en Notion desde las acciones aprobadas:
    - marcar o desmarcar un hábito de hoy o de un día anterior de la semana en curso;
    - tachar una prioridad del Top 3;
-   - marcar hitos y objetivos;
+   - crear, editar, archivar y recuperar objetivos e hitos (nunca se borran filas de Goals);
    - añadir una prioridad al Top 3 del día.
 
    Nada de borrar ni de crear filas en el Habit Tracker.
@@ -135,3 +135,4 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 - [ ] Comprobar que la integración de Notion tiene acceso a Vision Board y Learning
 - [x] 25 fotos subidas a Vision Board (imagen dentro de cada página) y `Current` de la casa = 900
 - [ ] 303 rellena la base Learning
+- [ ] Publicar el editor de objetivos (rama `goals-editor`)

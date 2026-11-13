@@ -25,6 +25,7 @@ const state = {
   loading: false,
   locked: !getToken(),
   lockError: "",
+  showArchived: false,
 };
 
 const app = document.getElementById("app")!;
@@ -167,17 +168,18 @@ function weatherText(c: number) {
 /** The house savings goal: a manual Money & Home goal with a target and a current amount. */
 function houseGoal(d: Summary): Goal | null {
   if (!d.goals.ok) return null;
-  const all = d.goals.data.filter((g) => g.area === "Money & Home" && g.target && g.current !== null);
+  const all = d.goals.data.filter((g) => g.status !== "Archived" && g.area === "Money & Home" && g.target && g.current !== null);
   return all.find((g) => /house|casa/i.test(g.name)) ?? all[0] ?? null;
 }
 function goalsDone(d: Summary) {
   if (!d.goals.ok) return null;
-  const gs = d.goals.data;
+  const gs = d.goals.data.filter((g) => g.status !== "Archived");
   return { done: gs.filter((g) => g.status === "Done").length, total: gs.length };
 }
 function goalDetail(g: Goal): string {
   if (g.status === "Done") return "Done";
-  if (g.tracking === "Milestones" && g.children.length) return `${g.children.filter((c) => c.status === "Done").length}/${g.children.length} milestones`;
+  const ms = g.children.filter((c) => c.status !== "Archived");
+  if (g.tracking === "Milestones" && ms.length) return `${ms.filter((c) => c.status === "Done").length}/${ms.length} milestones`;
   if (g.tracking === "Habit" && g.target && g.progress !== null) return `${Math.round(g.progress * g.target)}/${g.target} weeks`;
   if (g.target && g.current !== null) return `${eur(g.current)} / ${eur(g.target)}`;
   return g.status;
@@ -318,13 +320,14 @@ function areasSection(d: Summary) {
   const covers = d.vision?.ok ? d.vision.data.covers : {};
   const goals = d.goals.ok ? d.goals.data : [];
   const cards = AREAS.map((a) => {
-    const gs = goals.filter((g) => g.area === a);
+    const gs = goals.filter((g) => g.area === a && g.status !== "Archived");
     const vals = gs.map(goalValue).filter((v): v is number => v !== null);
     const avg = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
-    const sub = gs.length ? `${esc(gs[0].name)} · ${esc(goalDetail(gs[0]))}${gs.length > 1 ? ` · +${gs.length - 1}` : ""}` : "No goals yet · add one in Notion";
+    const sub = gs.length ? `${esc(gs[0].name)} · ${esc(goalDetail(gs[0]))}${gs.length > 1 ? ` · +${gs.length - 1}` : ""}` : "No goals yet";
     return `<div class="glass area"><div ${photoAttrs(covers[a])}></div><div class="area-b">
       <div class="area-t"><b>${esc(a)}</b><span class="num">${avg === null ? "–" : pct(avg)}</span></div>
-      <div class="bar"><i style="width:${avg === null ? 0 : pct(avg)}"></i></div><small>${sub}</small></div></div>`;
+      <div class="bar"><i style="width:${avg === null ? 0 : pct(avg)}"></i></div><small>${sub}</small>
+      <button type="button" class="link-btn" data-act="goal-new" data-area="${esc(a)}">+ Add goal</button></div></div>`;
   }).join("");
   return `<section id="areas"><div class="sec-h"><h2>Life areas</h2><span class="meta">Photo from your Vision Board · progress from your goals</span></div>
     ${!d.goals.ok ? `<div class="err">${esc(d.goals.error)}</div>` : ""}
@@ -388,26 +391,191 @@ function learningCard(d: Summary) {
 }
 
 function goalRow(g: Goal): string {
-  const done = g.status === "Done";
+  const done = g.status === "Done", archived = g.status === "Archived";
   const v = goalValue(g);
-  const right = done ? `<span class="pill ok">Done</span>` : `<small class="num">${esc(goalDetail(g))}</small>`;
-  const bar = v !== null && !done ? `<div class="bar"><i style="width:${pct(v)}"></i></div>` : "";
-  const subs = g.children.filter((c) => c.kind === "Sub-goal");
-  const steps = g.children.filter((c) => c.kind !== "Sub-goal");
+  const right = archived ? `<span class="pill">Archived</span>` : done ? `<span class="pill ok">Done</span>` : `<small class="num">${esc(goalDetail(g))}</small>`;
+  const bar = v !== null && !done && !archived ? `<div class="bar"><i style="width:${pct(v)}"></i></div>` : "";
+  const kids = g.children.filter((c) => c.status !== "Archived");
+  const subs = kids.filter((c) => c.kind === "Sub-goal");
+  const steps = kids.filter((c) => c.kind !== "Sub-goal");
   const ms = (list: Goal[]) => `<div class="ms">${list.map((m) => `<button type="button" data-goal="${m.id}" aria-pressed="${m.status === "Done"}">${esc(m.name)}</button>`).join("")}</div>`;
-  return `<div class="goal">
-    <div class="goal-t"><span>${esc(g.name)}</span>${right}</div>${bar}
-    ${steps.length ? ms(steps) : ""}
-    ${subs.map((s) => `<div class="sub">↳ ${esc(s.name)} ${s.status === "Done" ? "· done" : s.progress !== null ? `· ${pct(s.progress)}` : ""}</div>${s.children.length ? ms(s.children) : ""}`).join("")}
+  return `<div class="goal${archived ? " archived" : ""}">
+    <button type="button" class="goal-t" data-edit-goal="${g.id}" aria-label="Edit ${esc(g.name)}"><span>${esc(g.name)}${g.area ? `<em class="area-tag">${esc(g.area)}</em>` : ""}</span>${right}</button>${bar}
+    ${!archived && steps.length ? ms(steps) : ""}
+    ${archived ? "" : subs.map((s) => `<div class="sub">↳ ${esc(s.name)} ${s.status === "Done" ? "· done" : s.progress !== null ? `· ${pct(s.progress)}` : ""}</div>${s.children.length ? ms(s.children.filter((c) => c.status !== "Archived")) : ""}`).join("")}
   </div>`;
 }
 
 function goalsCard(d: Summary) {
   if (!d.goals.ok) return errorCard("Goals", d.goals.error);
-  const gs = d.goals.data;
-  return card("glass", "target", `${d.today.slice(0, 4)} goals`, `<span class="meta">${gs.filter((g) => g.status === "Done").length} of ${gs.length} done</span>`,
-    `${gs.length ? gs.map(goalRow).join("") : `<div class="empty">No goals for this year in Notion yet.</div>`}<div class="meta hint">Tap a milestone to mark it done.</div>`, "goals");
+  const all = d.goals.data;
+  const live = all.filter((g) => g.status !== "Archived");
+  const archived = all.length - live.length;
+  const shown = state.showArchived ? all : live;
+  return card("glass", "target", `${d.today.slice(0, 4)} goals`, `<button type="button" class="btn small" data-act="goal-new">+ New goal</button>`,
+    `<div class="meta goals-sum">${live.filter((g) => g.status === "Done").length} of ${live.length} done</div>
+     ${shown.length ? shown.map(goalRow).join("") : `<div class="empty">No goals yet. Add your first one.</div>`}
+     <div class="goals-foot"><span class="meta">Tap a goal to edit it, a milestone to tick it.</span>
+     ${archived ? `<button type="button" class="link-btn" data-act="toggle-archived">${state.showArchived ? "Hide" : "Show"} archived (${archived})</button>` : ""}</div>`, "goals");
 }
+
+// ---------- goal editor (side panel on PC, sheet on the phone) ----------
+type Mode = "number" | "milestones" | "habit" | "status";
+const MODES: [Mode, string][] = [["number", "Number"], ["milestones", "Milestones"], ["habit", "Habit"], ["status", "Status only"]];
+const modeOf = (g: Goal): Mode => (g.tracking === "Habit" ? "habit" : g.tracking === "Milestones" ? "milestones" : g.target !== null ? "number" : "status");
+const drawer = document.createElement("div");
+drawer.id = "drawer-root";
+document.body.appendChild(drawer);
+let editing: { id: string | null; pending: string[] } | null = null;
+
+function findGoal(id: string): Goal | null {
+  const d = state.data;
+  if (!d?.goals.ok) return null;
+  const walk = (list: Goal[]): Goal | null => { for (const g of list) { if (g.id === id) return g; const c = walk(g.children); if (c) return c; } return null; };
+  return walk(d.goals.data);
+}
+
+function openEditor(goal: Goal | null, presetArea = "") {
+  editing = { id: goal?.id ?? null, pending: [] };
+  const g = goal;
+  const mode: Mode = g ? modeOf(g) : "number";
+  const opt = (v: string, label: string, sel: boolean) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
+  const area = g ? g.area ?? "" : presetArea;
+  drawer.innerHTML = `<div class="drawer-bg" data-close></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title">
+    <header class="dr-h"><div><div class="eyebrow">${g ? "Edit goal" : "New goal"}</div><h2 id="dr-title">${g ? esc(g.name) : area ? esc(area) : "What do you want to achieve?"}</h2></div>
+      <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></header>
+    <form id="goal-form" class="dr-body" novalidate>
+      <label class="fld"><span>Name</span><input id="g-name" name="name" maxlength="200" required value="${esc(g?.name ?? "")}" placeholder="e.g. Visit Tokyo"></label>
+      <label class="fld"><span>Area</span><select id="g-area" name="area">${opt("", "No area", !area)}${AREAS.map((a) => opt(a, a, a === area)).join("")}</select></label>
+      <fieldset class="fld"><legend>How do you track it?</legend><div class="seg">
+        ${MODES.map(([m, l]) => `<label><input type="radio" name="mode" value="${m}"${m === mode ? " checked" : ""}><span>${l}</span></label>`).join("")}</div></fieldset>
+      <div class="mode-box" data-mode="number"><div class="two">
+        <label class="fld"><span>Target</span><input id="g-target" name="target" inputmode="decimal" value="${g?.target ?? ""}" placeholder="18000"></label>
+        <label class="fld"><span>Current</span><input id="g-current" name="current" inputmode="decimal" value="${g?.current ?? ""}" placeholder="0"></label></div>
+        <span class="hint">For savings, kilos, books read… Progress = current / target.</span></div>
+      <div class="mode-box" data-mode="habit"><div class="two">
+        <label class="fld"><span>Habit</span><select id="g-habit" name="habit">${opt("", "Choose a habit", !g?.habit)}${Object.keys(LOOK).map((h) => opt(h, h, g?.habit === h)).join("")}</select></label>
+        <label class="fld"><span>Weeks to reach</span><input id="g-weeks" name="weeks" inputmode="numeric" value="${g?.tracking === "Habit" ? g?.target ?? "" : ""}" placeholder="12"></label></div>
+        <span class="hint">Counts weeks in a row that meet the habit's weekly target.</span></div>
+      <div class="mode-box" data-mode="milestones"><span class="fld-l">Milestones</span><div id="ms-list"></div>
+        <div class="add"><input id="ms-new" placeholder="Add a milestone" maxlength="200" aria-label="New milestone"><button type="button" class="btn ghost" data-act="ms-add">Add</button></div></div>
+      <div class="two">
+        <label class="fld"><span>Due</span><input id="g-due" name="due" type="date" value="${g?.due?.slice(0, 10) ?? ""}"></label>
+        <label class="fld"><span>Status</span><select id="g-status" name="status">${["Not started", "In progress", "Done"].map((st) => opt(st, st, (g?.status ?? "In progress") === st)).join("")}</select></label></div>
+      <label class="fld"><span>Notes</span><textarea id="g-notes" name="notes" rows="3" maxlength="2000">${esc(g?.notes ?? "")}</textarea></label>
+      <div class="err" id="g-err" hidden></div>
+    </form>
+    <footer class="dr-f">
+      ${g ? `<button type="button" class="btn ghost" data-act="${g.status === "Archived" ? "goal-restore" : "goal-archive"}">${g.status === "Archived" ? "Restore" : "Archive"}</button>` : "<span></span>"}
+      <button type="submit" form="goal-form" class="btn" id="g-save">${g ? "Save" : "Create goal"}</button>
+    </footer>
+  </aside>`;
+  syncMode();
+  renderMilestones();
+  document.body.classList.add("drawer-open");
+  requestAnimationFrame(() => drawer.querySelector<HTMLInputElement>("#g-name")?.focus());
+}
+
+function closeEditor() {
+  editing = null;
+  drawer.innerHTML = "";
+  document.body.classList.remove("drawer-open");
+}
+
+function syncMode() {
+  const mode = drawer.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value;
+  drawer.querySelectorAll<HTMLElement>(".mode-box").forEach((b) => (b.hidden = b.dataset.mode !== mode));
+}
+
+function renderMilestones() {
+  const list = drawer.querySelector("#ms-list");
+  if (!list || !editing) return;
+  const g = editing.id ? findGoal(editing.id) : null;
+  const items = g ? g.children.filter((c) => c.status !== "Archived") : [];
+  list.innerHTML = (items.length || editing.pending.length)
+    ? items.map((m) => `<div class="ms-row"><button type="button" class="box-btn" data-ms-toggle="${m.id}" aria-pressed="${m.status === "Done"}" aria-label="Done">${m.status === "Done" ? svg(I.check, 3) : ""}</button>
+        <input value="${esc(m.name)}" data-ms-rename="${m.id}" maxlength="200" aria-label="Milestone name"><button type="button" class="x-btn" data-ms-remove="${m.id}" aria-label="Remove ${esc(m.name)}">✕</button></div>`).join("")
+      + editing.pending.map((name, i) => `<div class="ms-row"><span class="box-btn"></span><input value="${esc(name)}" data-ms-pending="${i}" maxlength="200" aria-label="Milestone name"><button type="button" class="x-btn" data-ms-unpend="${i}" aria-label="Remove">✕</button></div>`).join("")
+    : `<div class="hint">No milestones yet.</div>`;
+}
+
+function formPayload(): Record<string, unknown> {
+  const f = drawer.querySelector<HTMLFormElement>("#goal-form")!;
+  const v = (n: string) => (f.elements.namedItem(n) as HTMLInputElement | null)?.value.trim() ?? "";
+  const mode = v("mode") || (drawer.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value ?? "status");
+  const base: Record<string, unknown> = { name: v("name"), area: v("area"), due: v("due"), status: v("status"), notes: v("notes") };
+  if (mode === "number") Object.assign(base, { tracking: "Manual", target: v("target"), current: v("current") || "0", habit: "" });
+  if (mode === "habit") Object.assign(base, { tracking: "Habit", habit: v("habit"), target: v("weeks"), current: "" });
+  if (mode === "milestones") Object.assign(base, { tracking: "Milestones", target: "", current: "", habit: "" });
+  if (mode === "status") Object.assign(base, { tracking: "Manual", target: "", current: "", habit: "" });
+  return base;
+}
+
+async function saveEditor() {
+  if (!editing) return;
+  const err = drawer.querySelector<HTMLElement>("#g-err")!;
+  const btn = drawer.querySelector<HTMLButtonElement>("#g-save")!;
+  const payload = formPayload();
+  if (!payload.name) { err.textContent = "Write a name first."; err.hidden = false; return; }
+  if (payload.tracking === "Habit" && !payload.habit) { err.textContent = "Choose which habit this goal follows."; err.hidden = false; return; }
+  btn.disabled = true;
+  try {
+    const { id } = await api.saveGoal(editing.id ? { id: editing.id, ...payload } : payload);
+    for (const name of editing.pending.filter((n) => n.trim())) await api.saveGoal({ parentId: id, name, status: "Not started" });
+    closeEditor();
+    toast(payload.status === "Done" ? "Goal done. Well played." : "Saved");
+    await refresh();
+  } catch (e) {
+    err.textContent = (e as Error).message;
+    err.hidden = false;
+    btn.disabled = false;
+  }
+}
+
+async function milestoneAction(fn: () => Promise<unknown>) {
+  try { await fn(); await refresh(); renderMilestones(); }
+  catch (e) { toast((e as Error).message); }
+}
+
+drawer.addEventListener("click", async (e) => {
+  const t = e.target as HTMLElement;
+  if (t.closest("[data-close]")) return closeEditor();
+  const b = t.closest<HTMLElement>("button");
+  if (!b || !editing) return;
+  if (b.dataset.act === "ms-add") {
+    const input = drawer.querySelector<HTMLInputElement>("#ms-new")!;
+    const name = input.value.trim();
+    if (!name) return;
+    input.value = "";
+    if (!editing.id) { editing.pending.push(name); renderMilestones(); return; }
+    const id = editing.id;
+    return milestoneAction(() => api.saveGoal({ parentId: id, name, status: "Not started" }));
+  }
+  if (b.dataset.msToggle) {
+    const done = b.getAttribute("aria-pressed") !== "true";
+    return milestoneAction(() => api.setGoal(b.dataset.msToggle!, done ? "Done" : "Not started"));
+  }
+  if (b.dataset.msRemove) return milestoneAction(() => api.saveGoal({ id: b.dataset.msRemove, status: "Archived" }));
+  if (b.dataset.msUnpend) { editing.pending.splice(Number(b.dataset.msUnpend), 1); renderMilestones(); return; }
+  if (b.dataset.act === "goal-archive" || b.dataset.act === "goal-restore") {
+    const id = editing.id!;
+    const status = b.dataset.act === "goal-archive" ? "Archived" : "In progress";
+    try { await api.saveGoal({ id, status }); closeEditor(); toast(status === "Archived" ? "Archived" : "Restored"); await refresh(); }
+    catch (err) { toast((err as Error).message); }
+  }
+});
+drawer.addEventListener("change", (e) => {
+  const t = e.target as HTMLInputElement;
+  if (t.name === "mode") syncMode();
+  if (t.dataset.msRename && t.value.trim()) milestoneAction(() => api.saveGoal({ id: t.dataset.msRename, name: t.value.trim() }));
+  if (t.dataset.msPending && editing) editing.pending[Number(t.dataset.msPending)] = t.value;
+});
+drawer.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeEditor();
+  if (e.key === "Enter" && (e.target as HTMLElement).id === "ms-new") { e.preventDefault(); drawer.querySelector<HTMLButtonElement>('[data-act="ms-add"]')?.click(); }
+});
+drawer.addEventListener("submit", (e) => { e.preventDefault(); saveEditor(); });
 
 function lockView() {
   return `<div class="lock"><form class="glass pad" data-form="pin">
@@ -459,6 +627,9 @@ app.addEventListener("click", async (e) => {
   }
   const d = state.data;
   if (!d) return;
+  if (el.dataset.act === "goal-new") return openEditor(null, el.dataset.area ?? "");
+  if (el.dataset.editGoal) { const g = findGoal(el.dataset.editGoal); if (g) openEditor(g); return; }
+  if (el.dataset.act === "toggle-archived") { state.showArchived = !state.showArchived; render(); return; }
 
   if (el.dataset.habit && d.habits.ok) {
     const h = d.habits.data.habits.find((x) => x.prop === el.dataset.habit)!;
