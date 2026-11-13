@@ -137,4 +137,4 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 - [ ] Comprobar que la integración de Notion tiene acceso a Vision Board y Learning
 - [x] 25 fotos subidas a Vision Board (imagen dentro de cada página) y `Current` de la casa = 900
 - [ ] 303 rellena la base Learning
-- [ ] Publicar los editores de objetivos, Learning y fotos (rama `goals-editor`)
+- [x] Editores de objetivos, Learning y fotos publicados
