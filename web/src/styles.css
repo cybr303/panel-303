@@ -284,3 +284,34 @@ body.drawer-open { overflow: hidden; }
 .box-btn svg { width: 12px; height: 12px; }
 .x-btn { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--ink-3); cursor: pointer; }
 .x-btn:hover { background: rgba(11,27,51,.06); color: var(--ink); }
+
+/* learning: editable steps */
+.row-gap { display: flex; gap: 8px; align-items: center; }
+.chip-btn { font: 500 12px var(--body); padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(63,212,255,.35); background: rgba(63,212,255,.12); color: var(--cyan); cursor: pointer; }
+.chip-btn:hover { background: rgba(63,212,255,.22); }
+.step-name { background: none; border: 0; padding: 0; color: inherit; font-weight: 500; text-align: left; cursor: pointer; display: block; }
+.step-name:hover { color: var(--cyan); }
+.seg.three { grid-template-columns: repeat(3, 1fr); }
+
+/* vision: photo manager */
+.vision-edit { position: absolute; left: 20px; top: 20px; z-index: 2; font: 500 12px var(--body); padding: 6px 12px; border-radius: 999px; border: 1px solid var(--glass-line); background: rgba(255,255,255,.82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--ink); cursor: pointer; opacity: .85; }
+.vision-edit:hover, .vision-edit:focus-visible { opacity: 1; }
+.phone .vision { position: relative; }
+.vision-empty .btn { justify-self: start; margin-top: 6px; }
+.drawer.wide { width: min(720px, calc(100vw - 24px)); }
+.upload { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 14px; border-radius: 14px; background: rgba(47,111,228,.05); border: 1px dashed rgba(47,111,228,.3); }
+.upload .hint { grid-column: 1 / -1; }
+.up-btn { display: inline-flex; align-items: center; justify-content: center; }
+.ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.ph-card { display: grid; gap: 8px; padding: 8px; border-radius: 14px; background: #fff; border: 1px solid rgba(11,27,51,.08); min-width: 0; }
+.ph-card .ph { aspect-ratio: 4 / 3; border-radius: 10px; }
+.ph-card.off .ph { opacity: .35; }
+.ph-name { font-size: 13.5px; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(11,27,51,.1); width: 100%; min-width: 0; }
+.mini-fld { display: grid; gap: 3px; min-width: 0; }
+.mini-fld span { font-size: 11px; color: var(--ink-3); }
+.mini-fld select { font-size: 13px; padding: 5px 6px; border-radius: 8px; border: 1px solid rgba(11,27,51,.1); background: #fff; width: 100%; min-width: 0; }
+.ph-card .two { gap: 6px; }
+.toggles { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); }
+.toggles label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.toggles input { accent-color: var(--accent); width: 16px; height: 16px; }
+@media (max-width: 700px) { .drawer.wide { width: auto; } .ph-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ph-card .two { grid-template-columns: 1fr; } .toggles { gap: 6px; } .upload { grid-template-columns: 1fr; } }

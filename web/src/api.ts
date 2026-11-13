@@ -32,7 +32,8 @@ export interface Upcoming { title: string; date: string; kind: "Exam" | "Assignm
 export interface Goal { id: string; name: string; kind: string; status: string; tracking: string; habit: string | null; target: number | null; current: number | null; area: string | null; source: string; due: string | null; notes?: string; progress: number | null; children: Goal[] }
 export interface Photo { id: string; name: string; area: string | null; inCollage: boolean; order: number; focus: string; version: string }
 export interface Vision { collage: Photo[]; covers: Record<string, Photo | null>; total: number }
-export interface LearningItem { id: string; name: string; status: string; type: string | null; start: string | null; target: string | null; link: string | null }
+export interface LearningItem { id: string; name: string; status: string; type: string | null; start: string | null; target: string | null; link: string | null; notes?: string; order?: number | null }
+export interface PhotoRow extends Photo { active: boolean }
 export interface DayCount { date: string; done: number | null }
 export interface HabitStats { days: DayCount[]; monthRate: number; perfectDays: number; bestWeekday: number | null }
 export interface Summary {
@@ -55,12 +56,26 @@ export async function fetchPhoto(id: string): Promise<Blob> {
   return res.blob();
 }
 
+/** Sends a new Vision Board photo (already resized by the browser). */
+export async function uploadPhoto(blob: Blob, name: string, area: string): Promise<{ id: string }> {
+  const token = getToken();
+  const q = new URLSearchParams({ name, area });
+  const res = await fetch(`${API_URL}/api/vision/upload?${q}`, { method: "POST", headers: { "Content-Type": blob.type, ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: blob });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) { setToken(null); throw new LockedError("Locked"); }
+  if (!res.ok) throw new Error((data as any).error ?? `Error ${res.status}`);
+  return data as { id: string };
+}
+
 export const api = {
   login: (pin: string) => request<{ token: string }>("POST", "/api/auth", { pin }),
   summary: () => request<Summary>("GET", "/api/summary"),
   setHabit: (prop: string, done: boolean, date?: string) => request("POST", "/api/habit", { prop, done, date }),
   setPriority: (id: string, done: boolean) => request("POST", "/api/top3/done", { id, done }),
   addPriority: (name: string) => request("POST", "/api/top3", { name }),
+  allPhotos: () => request<{ photos: PhotoRow[] }>("GET", "/api/vision/all"),
+  savePhoto: (p: Record<string, unknown>) => request("POST", "/api/vision/save", p),
+  saveLearning: (x: Record<string, unknown>) => request<{ ok: true; id: string }>("POST", "/api/learning/save", x),
   saveGoal: (goal: Record<string, unknown>) => request<{ ok: true; id: string }>("POST", "/api/goal/save", goal),
   setGoal: (id: string, status: string) => request("POST", "/api/goal", { id, status }),
 };

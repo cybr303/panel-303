@@ -52,6 +52,20 @@ export class Notion {
     return this.call<Page & { parent: { type: string; data_source_id?: string }; last_edited_time: string }>("GET", `/pages/${pageId}`);
   }
 
+  /** Uploads one small file (single part) and returns its file_upload id, ready to attach to a page. */
+  async uploadFile(filename: string, contentType: string, data: ArrayBuffer): Promise<string> {
+    const up = await this.call<{ id: string }>("POST", "/file_uploads", { mode: "single_part", filename, content_type: contentType });
+    const form = new FormData();
+    form.append("file", new Blob([data], { type: contentType }), filename);
+    const res = await fetch(`${API}/file_uploads/${up.id}/send`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.token}`, "Notion-Version": VERSION },
+      body: form,
+    });
+    if (!res.ok) throw new NotionError(res.status, ((await res.json().catch(() => ({}))) as { message?: string }).message ?? "Upload failed");
+    return up.id;
+  }
+
   updatePage(pageId: string, properties: Record<string, unknown>) {
     return this.call<Page>("PATCH", `/pages/${pageId}`, { properties });
   }

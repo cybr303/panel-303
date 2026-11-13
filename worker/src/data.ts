@@ -5,6 +5,7 @@ import { habitStats } from "./stats";
 import { computeStreak, StreakResult } from "./streaks";
 import { pickToday, type Photo } from "./vision";
 import { goalProperties, type GoalInput } from "./goals";
+import { learningProperties, photoProperties, UPLOAD_MAX_BYTES, UPLOAD_TYPES, InvalidEdit } from "./edits";
 
 // ---------- Habits ----------
 export interface HabitOut extends StreakResult {
@@ -269,12 +270,14 @@ export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Pro
   return roots.map(clean);
 }
 
-/** Only rows of the Goals database can be changed from the panel. */
-async function assertGoal(n: Notion, id: string) {
-  if (!/^[0-9a-f-]{32,36}$/i.test(id)) throw new BadRequest("Unknown goal");
+/** Only rows of the given database can be changed from the panel. */
+async function assertRow(n: Notion, id: string, ds: string, what: string) {
+  if (!/^[0-9a-f-]{32,36}$/i.test(id)) throw new BadRequest(`Unknown ${what}`);
   const page = await n.getPage(id);
-  if (page.parent?.data_source_id?.replace(/-/g, "") !== DS.goals.replace(/-/g, "")) throw new BadRequest("Unknown goal");
+  if (page.parent?.data_source_id?.replace(/-/g, "") !== ds.replace(/-/g, "")) throw new BadRequest(`Unknown ${what}`);
+  return page;
 }
+const assertGoal = (n: Notion, id: string) => assertRow(n, id, DS.goals, "goal");
 
 export async function setGoalStatus(n: Notion, id: string, status: string) {
   await assertGoal(n, id);
@@ -345,15 +348,14 @@ export async function getVision(n: Notion, today: string) {
 /** Downloads one Vision Board photo. Only rows of the Vision Board can be read this way. */
 export async function getPhotoFile(n: Notion, id: string): Promise<{ url: string; version: string }> {
   if (!/^[0-9a-f-]{32,36}$/i.test(id)) throw new BadRequest("Unknown photo");
-  const page = await n.getPage(id);
-  if (page.parent?.data_source_id?.replace(/-/g, "") !== DS.vision.replace(/-/g, "")) throw new BadRequest("Unknown photo");
+  const page = await assertRow(n, id, DS.vision, "photo");
   const url = await photoSource(n, page);
   if (!url) throw new BadRequest("This row has no photo");
   return { url, version: page.last_edited_time };
 }
 
 // ---------- Learning roadmap ----------
-export interface LearningItem { id: string; name: string; status: string; type: string | null; start: string | null; target: string | null; link: string | null }
+export interface LearningItem { id: string; name: string; status: string; type: string | null; start: string | null; target: string | null; link: string | null; notes: string; order: number | null }
 
 export async function getLearning(n: Notion): Promise<LearningItem[]> {
   const rows = await n.query(DS.learning);
@@ -369,12 +371,56 @@ export async function getLearning(n: Notion): Promise<LearningItem[]> {
         start: dateStart(p.Start),
         target: dateStart(p["Target date"]),
         link: p.Link?.type === "url" ? p.Link.url ?? null : null,
-        order: num(p.Order) ?? 99,
+        notes: text(p.Notes),
+        rank: num(p.Order) ?? 99,
+        order: num(p.Order),
       };
     })
     .filter((x) => x.name)
-    .sort((a, b) => a.order - b.order || (rank[a.status] ?? 3) - (rank[b.status] ?? 3) || (a.target ?? a.start ?? "9").localeCompare(b.target ?? b.start ?? "9"))
-    .map(({ order: _o, ...x }) => x);
+    .sort((a, b) => a.rank - b.rank || (rank[a.status] ?? 3) - (rank[b.status] ?? 3) || (a.target ?? a.start ?? "9").localeCompare(b.target ?? b.start ?? "9"))
+    .map(({ rank: _r, ...x }) => x);
+}
+
+export async function saveLearning(n: Notion, body: Record<string, unknown>) {
+  const { id, ...input } = body;
+  if (id) {
+    await assertRow(n, String(id), DS.learning, "item");
+    return n.updatePage(String(id), learningProperties(input, false));
+  }
+  const props = learningProperties(input, true);
+  if (!("Order" in props)) {
+    const rows = await n.query(DS.learning);
+    props.Order = { number: rows.reduce((m, r) => Math.max(m, num(r.properties.Order) ?? 0), 0) + 1 };
+  }
+  return n.createPage(DS.learning, props);
+}
+
+// ---------- Vision Board editing ----------
+export interface PhotoRow { id: string; name: string; area: string | null; focus: string; inCollage: boolean; active: boolean; order: number; version: string }
+
+/** Every Vision Board row, hidden ones included, for the photo manager. */
+export async function getAllPhotos(n: Notion): Promise<PhotoRow[]> {
+  const rows = await n.query(DS.vision, { sorts: [{ property: "Order", direction: "ascending" }] });
+  return rows.map((r) => ({ ...toPhoto(r), active: checkbox(r.properties.Active) }));
+}
+
+export async function savePhoto(n: Notion, body: Record<string, unknown>) {
+  const { id, ...input } = body;
+  await assertRow(n, String(id ?? ""), DS.vision, "photo");
+  return n.updatePage(String(id), photoProperties(input));
+}
+
+/** Stores a new photo in Notion and creates its Vision Board row. */
+export async function uploadPhoto(n: Notion, contentType: string, data: ArrayBuffer, meta: Record<string, unknown>) {
+  if (!UPLOAD_TYPES.includes(contentType)) throw new InvalidEdit("Only JPEG, PNG or WebP photos");
+  if (data.byteLength === 0 || data.byteLength > UPLOAD_MAX_BYTES) throw new InvalidEdit("The photo is too large (5 MB max)");
+  const props = photoProperties({ name: meta.name || "Photo", area: meta.area || "Vision", focus: meta.focus || "Center", inCollage: true, active: true });
+  const ext = contentType.split("/")[1].replace("jpeg", "jpg");
+  const fileId = await n.uploadFile(`vision.${ext}`, contentType, data);
+  const rows = await n.query(DS.vision);
+  props.Order = { number: rows.reduce((m, r) => Math.max(m, num(r.properties.Order) ?? 0), 0) + 1 };
+  props.Photo = { files: [{ type: "file_upload", file_upload: { id: fileId }, name: `vision.${ext}` }] };
+  return n.createPage(DS.vision, props);
 }
 
 export class BadRequest extends Error {}

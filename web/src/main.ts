@@ -1,5 +1,5 @@
 import "./styles.css";
-import { api, fetchPhoto, getToken, LockedError, setToken, type Goal, type Habit, type HabitStats, type LearningItem, type Photo, type Summary } from "./api";
+import { api, fetchPhoto, getToken, LockedError, setToken, uploadPhoto, type Goal, type Habit, type HabitStats, type LearningItem, type Photo, type PhotoRow, type Summary } from "./api";
 import { WEATHER } from "./config";
 
 // Phone: 3 tabs. Desktop (≥1024px): one dashboard with a sidebar that jumps between sections.
@@ -109,8 +109,8 @@ function photoAttrs(p: Photo | null | undefined, label = "") {
   const url = photoUrls.get(photoKey(p));
   return `class="ph${url ? "" : " loading"}" data-photo="${p.id}" data-v="${esc(p.version)}" data-l="${esc(label)}" style="background-position:${esc(p.focus)};${url ? `background-image:url(${url})` : ""}"`;
 }
-function hydratePhotos() {
-  app.querySelectorAll<HTMLElement>("[data-photo]").forEach((el) => {
+function hydratePhotos(root: ParentNode = app) {
+  root.querySelectorAll<HTMLElement>("[data-photo]").forEach((el) => {
     const key = `${el.dataset.photo}@${el.dataset.v}`;
     const ready = photoUrls.get(key);
     if (ready) { el.style.backgroundImage = `url(${ready})`; el.classList.remove("loading"); return; }
@@ -119,7 +119,7 @@ function hydratePhotos() {
     fetchPhoto(el.dataset.photo!)
       .then((blob) => {
         photoUrls.set(key, URL.createObjectURL(blob));
-        app.querySelectorAll<HTMLElement>(`[data-photo="${el.dataset.photo}"]`).forEach((x) => { x.style.backgroundImage = `url(${photoUrls.get(key)})`; x.classList.remove("loading"); });
+        document.querySelectorAll<HTMLElement>(`[data-photo="${el.dataset.photo}"]`).forEach((x) => { x.style.backgroundImage = `url(${photoUrls.get(key)})`; x.classList.remove("loading"); });
       })
       .catch((e) => { if (e instanceof LockedError) { state.locked = true; render(); } })
       .finally(() => photoLoading.delete(key));
@@ -259,10 +259,11 @@ function visionSection(d: Summary) {
       ${g && g.total ? `<div class="vstat">${ring(g.done / g.total, `${g.done}/${g.total}`)}<div><b class="num">${g.done} of ${g.total}</b><span>${d.today.slice(0, 4)} goals done</span></div></div>` : ""}
     </div>`;
   if (!photos.length) {
-    return `<section class="glass vision empty-vision" id="vision"><div class="vision-empty"><b>Your vision board is empty</b><span>Add photos to the Vision Board in Notion, tick “Active” and “In collage”. A new set shows every day.</span></div>${stats}</section>`;
+    return `<section class="glass vision empty-vision" id="vision"><div class="vision-empty"><b>Your vision board is empty</b><span>Add photos of the life you are building. A new set shows every day.</span><button type="button" class="btn small" data-act="photos">Add photos</button></div>${stats}</section>`;
   }
   const n = photos.length;
   return `<section class="glass vision n${Math.min(n, 8)}" id="vision" aria-label="Vision board">
+    <button type="button" class="vision-edit" data-act="photos">Edit photos</button>
     ${photos.map((p, i) => `<div ${photoAttrs(p, p.name)} data-i="${i}"></div>`).join("")}
     ${stats}
   </section>`;
@@ -383,11 +384,10 @@ function learningCard(d: Summary) {
   const step = (x: LearningItem) => {
     const cls = x.status === "Done" ? "done" : x.status === "Learning" ? "now" : "";
     const when = x.status === "Done" ? (x.target ?? x.start) : x.target;
-    const name = x.link ? `<a href="${esc(x.link)}" target="_blank" rel="noopener">${esc(x.name)}</a>` : esc(x.name);
-    return `<div class="step ${cls}"><span class="dot"></span><div><b>${name}</b><small>${esc(x.status)}${when ? ` · ${x.status === "Done" ? "" : "target "}${monthYear(when)}` : ""}</small></div><span class="tag">${x.status === "Learning" ? "Now" : esc(x.type ?? "")}</span></div>`;
+    return `<div class="step ${cls}"><span class="dot"></span><div><button type="button" class="step-name" data-edit-learn="${x.id}">${esc(x.name)}</button><small>${esc(x.status)}${when ? ` · ${x.status === "Done" ? "" : "target "}${monthYear(when)}` : ""}</small></div><span class="tag">${x.status === "Learning" ? "Now" : esc(x.type ?? "")}</span></div>`;
   };
-  return `<section class="deep pad" id="learning"><div class="card-h"><h3>${svg(I.code)}Learning roadmap</h3>${items.length ? `<span class="chip num">${done} of ${items.length} done</span>` : ""}</div>
-    ${items.length ? `<div class="road">${items.map(step).join("")}</div>` : `<div class="meta">Add technologies and courses to the Learning database in Notion.</div>`}</section>`;
+  return `<section class="deep pad" id="learning"><div class="card-h"><h3>${svg(I.code)}Learning roadmap</h3><div class="row-gap">${items.length ? `<span class="chip num">${done} of ${items.length} done</span>` : ""}<button type="button" class="chip-btn" data-act="learn-new">+ Add</button></div></div>
+    ${items.length ? `<div class="road">${items.map(step).join("")}</div>` : `<div class="meta">Add the technologies, courses and certifications you want to learn.</div>`}</section>`;
 }
 
 function goalRow(g: Goal): string {
@@ -441,6 +441,7 @@ function openEditor(goal: Goal | null, presetArea = "") {
   const mode: Mode = g ? modeOf(g) : "number";
   const opt = (v: string, label: string, sel: boolean) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
   const area = g ? g.area ?? "" : presetArea;
+  drawer.dataset.kind = "goal";
   drawer.innerHTML = `<div class="drawer-bg" data-close></div>
   <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title">
     <header class="dr-h"><div><div class="eyebrow">${g ? "Edit goal" : "New goal"}</div><h2 id="dr-title">${g ? esc(g.name) : area ? esc(area) : "What do you want to achieve?"}</h2></div>
@@ -479,6 +480,9 @@ function openEditor(goal: Goal | null, presetArea = "") {
 
 function closeEditor() {
   editing = null;
+  if (drawer.dataset.kind === "photos" && photosChanged) refresh();
+  photosChanged = false;
+  drawer.dataset.kind = "";
   drawer.innerHTML = "";
   document.body.classList.remove("drawer-open");
 }
@@ -542,7 +546,7 @@ drawer.addEventListener("click", async (e) => {
   const t = e.target as HTMLElement;
   if (t.closest("[data-close]")) return closeEditor();
   const b = t.closest<HTMLElement>("button");
-  if (!b || !editing) return;
+  if (!b || !editing || drawer.dataset.kind !== "goal") return;
   if (b.dataset.act === "ms-add") {
     const input = drawer.querySelector<HTMLInputElement>("#ms-new")!;
     const name = input.value.trim();
@@ -567,15 +571,150 @@ drawer.addEventListener("click", async (e) => {
 });
 drawer.addEventListener("change", (e) => {
   const t = e.target as HTMLInputElement;
+  if (drawer.dataset.kind === "photos") return photoChange(t);
+  if (drawer.dataset.kind !== "goal") return;
   if (t.name === "mode") syncMode();
   if (t.dataset.msRename && t.value.trim()) milestoneAction(() => api.saveGoal({ id: t.dataset.msRename, name: t.value.trim() }));
   if (t.dataset.msPending && editing) editing.pending[Number(t.dataset.msPending)] = t.value;
 });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && drawer.dataset.kind) closeEditor(); });
 drawer.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeEditor();
   if (e.key === "Enter" && (e.target as HTMLElement).id === "ms-new") { e.preventDefault(); drawer.querySelector<HTMLButtonElement>('[data-act="ms-add"]')?.click(); }
 });
-drawer.addEventListener("submit", (e) => { e.preventDefault(); saveEditor(); });
+drawer.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (drawer.dataset.kind === "goal") saveEditor();
+  if (drawer.dataset.kind === "learn") saveLearningForm();
+});
+
+// ---------- learning editor ----------
+let learnId: string | null = null;
+const LEARN_TYPES = ["Technology", "Course", "Certification", "Book"];
+function openLearning(x: LearningItem | null) {
+  learnId = x?.id ?? null;
+  const opt = (v: string, label: string, sel: boolean) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
+  drawer.dataset.kind = "learn";
+  drawer.innerHTML = `<div class="drawer-bg" data-close></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title">
+    <header class="dr-h"><div><div class="eyebrow">Learning roadmap</div><h2 id="dr-title">${x ? esc(x.name) : "What will you learn next?"}</h2></div>
+      <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></header>
+    <form id="learn-form" class="dr-body" novalidate>
+      <label class="fld"><span>Name</span><input name="name" maxlength="200" value="${esc(x?.name ?? "")}" placeholder="e.g. Docker, CompTIA Security+"></label>
+      <fieldset class="fld"><legend>Status</legend><div class="seg three">
+        ${["Planned", "Learning", "Done"].map((st) => `<label><input type="radio" name="status" value="${st}"${(x?.status ?? "Planned") === st ? " checked" : ""}><span>${st}</span></label>`).join("")}</div></fieldset>
+      <label class="fld"><span>Type</span><select name="type">${opt("", "No type", !x?.type)}${LEARN_TYPES.map((t) => opt(t, t, x?.type === t)).join("")}</select></label>
+      <div class="two">
+        <label class="fld"><span>Start</span><input name="start" type="date" value="${x?.start?.slice(0, 10) ?? ""}"></label>
+        <label class="fld"><span>Target date</span><input name="target" type="date" value="${x?.target?.slice(0, 10) ?? ""}"></label></div>
+      <label class="fld"><span>Link</span><input name="link" type="url" value="${esc(x?.link ?? "")}" placeholder="https://"></label>
+      <label class="fld"><span>Position in the roadmap</span><input name="order" inputmode="numeric" value="${x?.order ?? ""}" placeholder="Leave empty to add at the end"></label>
+      <label class="fld"><span>Notes</span><textarea name="notes" rows="3" maxlength="2000">${esc(x?.notes ?? "")}</textarea></label>
+      ${x?.link ? `<a class="link-btn" href="${esc(x.link)}" target="_blank" rel="noopener">Open link ↗</a>` : ""}
+      <div class="err" id="l-err" hidden></div>
+    </form>
+    <footer class="dr-f"><button type="button" class="btn ghost" data-close>Cancel</button><button type="submit" form="learn-form" class="btn" id="l-save">${x ? "Save" : "Add to roadmap"}</button></footer>
+  </aside>`;
+  document.body.classList.add("drawer-open");
+  requestAnimationFrame(() => drawer.querySelector<HTMLInputElement>('input[name="name"]')?.focus());
+}
+
+async function saveLearningForm() {
+  const f = drawer.querySelector<HTMLFormElement>("#learn-form")!;
+  const fd = new FormData(f);
+  const payload: Record<string, unknown> = {};
+  for (const k of ["name", "status", "type", "start", "target", "link", "notes"]) payload[k] = String(fd.get(k) ?? "").trim();
+  const order = String(fd.get("order") ?? "").trim();
+  if (order || learnId) payload.order = order;
+  const err = drawer.querySelector<HTMLElement>("#l-err")!;
+  if (!payload.name) { err.textContent = "Write a name first."; err.hidden = false; return; }
+  const btn = drawer.querySelector<HTMLButtonElement>("#l-save")!;
+  btn.disabled = true;
+  try {
+    await api.saveLearning(learnId ? { id: learnId, ...payload } : payload);
+    closeEditor();
+    toast("Saved");
+    await refresh();
+  } catch (e) { err.textContent = (e as Error).message; err.hidden = false; btn.disabled = false; }
+}
+
+// ---------- photo manager ----------
+let photosChanged = false;
+const PHOTO_AREAS = ["Vision", ...AREAS];
+async function openPhotos() {
+  drawer.dataset.kind = "photos";
+  drawer.innerHTML = `<div class="drawer-bg" data-close></div>
+  <aside class="drawer wide" role="dialog" aria-modal="true" aria-labelledby="dr-title">
+    <header class="dr-h"><div><div class="eyebrow">Vision board</div><h2 id="dr-title">Your photos</h2></div>
+      <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></header>
+    <div class="dr-body">
+      <div class="upload">
+        <label class="fld"><span>Add photos to</span><select id="up-area">${PHOTO_AREAS.map((a) => `<option>${esc(a)}</option>`).join("")}</select></label>
+        <label class="btn up-btn"><input id="up-files" type="file" accept="image/*" multiple hidden>Choose photos</label>
+        <span class="hint" id="up-status">Photos are resized before uploading and stay private behind your PIN.</span>
+      </div>
+      <div id="ph-grid" class="ph-grid"><div class="empty">Loading your photos…</div></div>
+    </div>
+    <footer class="dr-f"><span class="hint">Changes save on their own.</span><button type="button" class="btn" data-close>Done</button></footer>
+  </aside>`;
+  document.body.classList.add("drawer-open");
+  await loadPhotoGrid();
+}
+
+async function loadPhotoGrid() {
+  const grid = drawer.querySelector("#ph-grid");
+  if (!grid) return;
+  try {
+    const { photos } = await api.allPhotos();
+    const sel = (name: string, list: string[], v: string, label: string) => `<label class="mini-fld"><span>${label}</span><select data-k="${name}">${list.map((x) => `<option${x === v ? " selected" : ""}>${esc(x)}</option>`).join("")}</select></label>`;
+    grid.innerHTML = photos.length ? photos.map((p: PhotoRow) => `<div class="ph-card${p.active ? "" : " off"}" data-id="${p.id}">
+        <div ${photoAttrs(p)}></div>
+        <input class="ph-name" data-k="name" value="${esc(p.name)}" maxlength="200" aria-label="Photo name">
+        <div class="two">${sel("area", PHOTO_AREAS, p.area ?? "Vision", "Area")}${sel("focus", ["Center", "Top", "Bottom", "Left", "Right"], p.focus.charAt(0).toUpperCase() + p.focus.slice(1), "Show")}</div>
+        <div class="toggles"><label><input type="checkbox" data-k="inCollage"${p.inCollage ? " checked" : ""}> In collage</label><label><input type="checkbox" data-k="active"${p.active ? " checked" : ""}> Visible</label></div>
+      </div>`).join("") : `<div class="empty">No photos yet. Choose some above.</div>`;
+    hydratePhotos(grid);
+  } catch (e) { grid.innerHTML = `<div class="err">${esc((e as Error).message)}</div>`; }
+}
+
+async function photoChange(t: HTMLInputElement) {
+  if (t.id === "up-files") return uploadFiles(t);
+  const card = t.closest<HTMLElement>(".ph-card");
+  if (!card || !t.dataset.k) return;
+  const k = t.dataset.k;
+  const value = t.type === "checkbox" ? t.checked : t.value;
+  try {
+    await api.savePhoto({ id: card.dataset.id, [k]: value });
+    photosChanged = true;
+    if (k === "active") card.classList.toggle("off", !t.checked);
+    if (k === "focus") card.querySelector<HTMLElement>(".ph")!.style.backgroundPosition = String(value).toLowerCase();
+    toast("Saved");
+  } catch (e) { toast((e as Error).message); }
+}
+
+/** Shrinks a photo to 1600px on its long side as JPEG, so uploads stay small. */
+async function shrink(file: File): Promise<Blob> {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Could not read this photo"))), "image/jpeg", 0.85));
+}
+
+async function uploadFiles(input: HTMLInputElement) {
+  const files = [...(input.files ?? [])];
+  const status = drawer.querySelector<HTMLElement>("#up-status")!;
+  const area = drawer.querySelector<HTMLSelectElement>("#up-area")!.value;
+  let ok = 0;
+  for (const [i, f] of files.entries()) {
+    status.textContent = `Uploading ${i + 1} of ${files.length}…`;
+    try { await uploadPhoto(await shrink(f), f.name.replace(/\.[^.]+$/, "").slice(0, 80) || "Photo", area); ok++; }
+    catch (e) { toast(`${f.name}: ${(e as Error).message}`); }
+  }
+  input.value = "";
+  status.textContent = ok ? `${ok} photo${ok === 1 ? "" : "s"} added to ${area}.` : "Nothing was uploaded.";
+  if (ok) { photosChanged = true; await loadPhotoGrid(); }
+}
 
 function lockView() {
   return `<div class="lock"><form class="glass pad" data-form="pin">
@@ -628,6 +767,9 @@ app.addEventListener("click", async (e) => {
   const d = state.data;
   if (!d) return;
   if (el.dataset.act === "goal-new") return openEditor(null, el.dataset.area ?? "");
+  if (el.dataset.act === "photos") return openPhotos();
+  if (el.dataset.act === "learn-new") return openLearning(null);
+  if (el.dataset.editLearn) { const it = d.learning?.ok ? d.learning.data.find((x) => x.id === el.dataset.editLearn) : null; if (it) openLearning(it); return; }
   if (el.dataset.editGoal) { const g = findGoal(el.dataset.editGoal); if (g) openEditor(g); return; }
   if (el.dataset.act === "toggle-archived") { state.showArchived = !state.showArchived; render(); return; }
 

@@ -1,6 +1,7 @@
 import { checkPin, issueToken, pinLocked, verifyToken } from "./auth";
 import { todayIn } from "./dates";
-import { addTop3, BadRequest, getAgenda, getGoals, getHabits, getLearning, getPhotoFile, getTop3, getVision, saveGoal, setGoalStatus, setHabit, setTop3Done } from "./data";
+import { addTop3, BadRequest, getAgenda, getGoals, getHabits, getLearning, getPhotoFile, getTop3, getVision, saveGoal, saveLearning, getAllPhotos, savePhoto, uploadPhoto, setGoalStatus, setHabit, setTop3Done } from "./data";
+import { InvalidEdit } from "./edits";
 import { InvalidGoal } from "./goals";
 import { Notion, NotionError } from "./notion";
 
@@ -107,6 +108,18 @@ export default {
         return new Response(img.body, { headers: { ...h, "Content-Type": img.headers.get("Content-Type") ?? "image/jpeg", "Cache-Control": "private, max-age=86400" } });
       }
 
+      if (path === "/api/vision/all" && req.method === "GET") {
+        return json({ photos: await getAllPhotos(n) }, 200, h);
+      }
+
+      // New Vision Board photo: raw image body, name/area in the query string.
+      if (path === "/api/vision/upload" && req.method === "POST") {
+        const page = await uploadPhoto(n, (req.headers.get("Content-Type") ?? "").split(";")[0], await req.arrayBuffer(), {
+          name: url.searchParams.get("name") ?? "", area: url.searchParams.get("area") ?? "",
+        });
+        return json({ ok: true, id: page.id }, 200, h);
+      }
+
       if (req.method === "POST") {
         const body = (await req.json().catch(() => ({}))) as Record<string, any>;
         if (path === "/api/habit") {
@@ -127,6 +140,14 @@ export default {
           await setGoalStatus(n, String(body.id), String(body.status));
           return json({ ok: true }, 200, h);
         }
+        if (path === "/api/learning/save") {
+          const page = await saveLearning(n, body);
+          return json({ ok: true, id: page.id }, 200, h);
+        }
+        if (path === "/api/vision/save") {
+          await savePhoto(n, body);
+          return json({ ok: true }, 200, h);
+        }
         if (path === "/api/goal/save") {
           const page = await saveGoal(n, today.slice(0, 4), body);
           return json({ ok: true, id: page.id }, 200, h);
@@ -135,7 +156,7 @@ export default {
 
       return json({ error: "Not found" }, 404, h);
     } catch (e) {
-      if (e instanceof BadRequest || e instanceof InvalidGoal) return json({ error: e.message }, 400, h);
+      if (e instanceof BadRequest || e instanceof InvalidGoal || e instanceof InvalidEdit) return json({ error: e.message }, 400, h);
       if (e instanceof NotionError) return json({ error: `Notion: ${e.message}` }, 502, h);
       return json({ error: "Server error" }, 500, h);
     }

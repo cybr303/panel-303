@@ -15,11 +15,11 @@ Un único usuario: **303**. Uso personal y privado, sobre todo desde el móvil y
 ## Secciones (aprobadas)
 **PC (≥1024px), una sola pantalla con barra lateral** (Dashboard, Vision, Life areas, Habits, Learning, Goals saltan a cada bloque):
 1. **Cabecera:** saludo, fecha, tiempo en Madrid, % del año.
-2. **Vision:** collage de 8 fotos del Vision Board que **cambia cada día** (fijo durante el día). Encima, dos cifras: **% ahorrado para la casa** (objetivo «Save 18.000€ for the house», `Current`/`Target`) y **objetivos del año cumplidos**. Sin texto.
+2. **Vision:** collage de 8 fotos del Vision Board que **cambia cada día** (fijo durante el día). Encima, dos cifras: **% ahorrado para la casa** (objetivo «Save 18.000€ for the house», `Current`/`Target`) y **objetivos del año cumplidos**. Sin texto. Botón «Edit photos»: gestor de fotos (subir desde el PC o el móvil, que se redimensionan a 1600px antes de enviarse; cambiar nombre, área, Focus, «In collage» y «Visible»).
 3. **Today** (tarjeta azul marino): reloj, hábitos de hoy, mejor racha actual, % del mes y exámenes en 7 días. **Top 3** (tachar y añadir). **Agenda** (desde Notion).
 4. **Life areas:** Health & Gym · Career & Code · Money & Home · Apolo · Travel · Personal Growth. Cada una con una portada del Vision Board que **también rota cada día** entre las fotos de su área, y el progreso medio de sus objetivos (propiedad `Area` de Goals).
 5. **Habits:** icono y color propio (gama azul), casillas L–D (hoy y días anteriores de la semana), racha y récord; mapa de 20 semanas (día perfecto = azul cielo `#87ceff`); % del mes, días perfectos y mejor día.
-6. **Learning roadmap** (tarjeta azul marino): línea de tiempo desde la base Learning.
+6. **Learning roadmap** (tarjeta azul marino): línea de tiempo desde la base Learning. «+ Add» y tocar un paso abre el editor (nombre, estado, tipo, fechas, enlace, posición, notas).
 7. **Goals:** objetivos del año con progreso e hitos. **Se crean y editan desde el panel** (panel lateral en PC, hoja inferior en el móvil): nombre, área, seguimiento (Number = `Current`/`Target`, Milestones, Habit, Status only), fecha, estado y notas; hitos (añadir, renombrar, marcar, quitar); archivar y recuperar. Cada tarjeta de área tiene «+ Add goal» con el área ya elegida.
 
 **Móvil:** 3 pestañas: Today (collage reducido, Today, Top 3, Agenda, hábitos de hoy), Habits, Life (áreas, objetivos, roadmap).
@@ -32,7 +32,7 @@ iPhone (PWA en GitHub Pages)  ──PIN──▶  Cloudflare Worker  ──▶  
    repo público cybr303/panel-303         (guarda secretos)  ──▶  Open-Meteo (tiempo, sin clave)
 ```
 - **Frontend:** estático, servido por GitHub Pages desde `cybr303/panel-303`. Es una PWA con manifest, icono "303", pantalla completa y modo oscuro. Vite + TypeScript sin framework (`web/`). GitHub Actions publica en cada push a `main` (`.github/workflows/pages.yml`); la URL del Worker está en `web/src/config.ts` (se puede cambiar con `VITE_API_URL`).
-- **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `GET /api/photo?id=` (fotos del Vision Board, solo con sesión), `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`, `POST /api/goal/save` (crear o editar objetivos e hitos; solo filas de Goals, validado en `worker/src/goals.ts`). Guarda el token de Notion y el PIN como *secrets*. Expone una API mínima y propia para el panel.
+- **Backend:** Cloudflare Worker (gratis) en `worker/`. Rutas: `POST /api/auth`, `GET /api/summary`, `GET /api/photo?id=` (fotos del Vision Board, solo con sesión), `POST /api/habit`, `POST /api/top3`, `POST /api/top3/done`, `POST /api/goal`, `POST /api/goal/save` (crear o editar objetivos e hitos; solo filas de Goals, validado en `worker/src/goals.ts`), `POST /api/learning/save`, `GET /api/vision/all`, `POST /api/vision/save`, `POST /api/vision/upload` (cuerpo = imagen; la sube a Notion con su File Upload API y crea la fila). Validación de Learning y Vision Board en `worker/src/edits.ts`. Guarda el token de Notion y el PIN como *secrets*. Expone una API mínima y propia para el panel.
 - **Acceso:** PIN corto. El Worker devuelve un token de sesión que el iPhone guarda. Sin PIN no se devuelve ningún dato.
 - **Actualización:** al abrir la app, al volver a ella y cada pocos minutos mientras está abierta.
 
@@ -107,7 +107,7 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 
 ## Comandos
 - Web: `cd web && npm run dev` / `npm run build`
-- Worker: `cd worker && npm test` (rachas en `src/streaks.test.ts`, estadísticas en `src/stats.test.ts`, rotación del Vision Board en `src/vision.test.ts`, validación de objetivos en `src/goals.test.ts`) / `npm run typecheck` / `npx wrangler deploy`
+- Worker: `cd worker && npm test` (rachas en `src/streaks.test.ts`, estadísticas en `src/stats.test.ts`, rotación del Vision Board en `src/vision.test.ts`, validación de objetivos en `src/goals.test.ts`, de Learning y fotos en `src/edits.test.ts`) / `npm run typecheck` / `npx wrangler deploy`
 
 ## Reglas
 1. **Nunca** se suben datos personales, tokens, claves, PIN ni el Excel al repositorio. El repo es público.
@@ -116,6 +116,8 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
    - marcar o desmarcar un hábito de hoy o de un día anterior de la semana en curso;
    - tachar una prioridad del Top 3;
    - crear, editar, archivar y recuperar objetivos e hitos (nunca se borran filas de Goals);
+   - crear y editar elementos de Learning;
+   - subir fotos al Vision Board y cambiar su nombre, área, Focus, «In collage» y «Active» (ocultar en vez de borrar);
    - añadir una prioridad al Top 3 del día.
 
    Nada de borrar ni de crear filas en el Habit Tracker.
@@ -135,4 +137,4 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 - [ ] Comprobar que la integración de Notion tiene acceso a Vision Board y Learning
 - [x] 25 fotos subidas a Vision Board (imagen dentro de cada página) y `Current` de la casa = 900
 - [ ] 303 rellena la base Learning
-- [ ] Publicar el editor de objetivos (rama `goals-editor`)
+- [ ] Publicar los editores de objetivos, Learning y fotos (rama `goals-editor`)
