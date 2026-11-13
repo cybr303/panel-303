@@ -141,4 +141,4 @@ La agenda del día se lee de Notion, que es la fuente principal de todo. La auto
 - [x] 25 fotos subidas a Vision Board (imagen dentro de cada página) y `Current` de la casa = 900
 - [ ] 303 rellena la base Learning
 - [x] Editores de objetivos, Learning y fotos publicados
-- [ ] Publicar el archivo y el cierre de año (rama `year-archive`)
+- [x] Archivo y cierre de año publicados
