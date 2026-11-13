@@ -1,8 +1,10 @@
 import { checkPin, issueToken, pinLocked, verifyToken } from "./auth";
 import { todayIn } from "./dates";
-import { addTop3, BadRequest, getAgenda, getGoals, getHabits, getLearning, getPhotoFile, getTop3, getVision, saveGoal, saveLearning, getAllPhotos, savePhoto, uploadPhoto, setGoalStatus, setHabit, setTop3Done } from "./data";
+import { addTop3, BadRequest, getAgenda, getGoals, getHabits, getLearning, getPhotoFile, getTop3, getVision, getGoalsByYear, closeYear, saveGoal, saveLearning, getAllPhotos, savePhoto, uploadPhoto, setGoalStatus, setHabit, setTop3Done } from "./data";
 import { InvalidEdit } from "./edits";
 import { InvalidGoal } from "./goals";
+import { activeYear, InvalidClose, planClose, setActiveYear, summarizeYear } from "./years";
+import { AREAS } from "./config";
 import { Notion, NotionError } from "./notion";
 
 export interface Env {
@@ -11,6 +13,7 @@ export interface Env {
   SESSION_SECRET: string;
   ALLOWED_ORIGINS: string;
   TIMEZONE: string;
+  PANEL_STORE: KVNamespace;
 }
 
 function cors(env: Env, req: Request): Record<string, string> {
@@ -64,6 +67,7 @@ export default {
 
       const n = new Notion(env.NOTION_TOKEN);
       const today = todayIn(env.TIMEZONE);
+      const goalsYear = await activeYear(env.PANEL_STORE, today);
 
       if (path === "/api/summary" && req.method === "GET") {
         const [habits, top3, agenda, vision, learning] = await Promise.all([
@@ -73,10 +77,11 @@ export default {
           section(() => getVision(n, today)),
           section(() => getLearning(n)),
         ]);
-        const goals = await section(() => getGoals(n, today.slice(0, 4), habits.ok ? habits.data.habits : []));
+        const goals = await section(() => getGoals(n, goalsYear, habits.ok ? habits.data.habits : []));
         return json(
           {
             today,
+            goalsYear,
             habits: habits.ok
               ? { ok: true, data: { habits: habits.data.habits, hasTodayRow: !!habits.data.todayRowId, weekHasRow: habits.data.weekHasRow, stats: habits.data.stats } }
               : habits,
@@ -106,6 +111,16 @@ export default {
           await cache.put(cacheKey, img.clone());
         }
         return new Response(img.body, { headers: { ...h, "Content-Type": img.headers.get("Content-Type") ?? "image/jpeg", "Cache-Control": "private, max-age=86400" } });
+      }
+
+      if (path === "/api/archive" && req.method === "GET") {
+        const byYear = await getGoalsByYear(n);
+        const years = Object.keys(byYear).filter((y) => /^\d{4}$/.test(y)).sort().reverse();
+        return json({
+          active: goalsYear,
+          years: years.filter((y) => y < goalsYear).map((y) => ({ year: y, ...summarizeYear(byYear[y], AREAS), goals: byYear[y] })),
+          archived: (byYear[goalsYear] ?? []).filter((g) => g.status === "Archived"),
+        }, 200, h);
       }
 
       if (path === "/api/vision/all" && req.method === "GET") {
@@ -140,6 +155,14 @@ export default {
           await setGoalStatus(n, String(body.id), String(body.status));
           return json({ ok: true }, 200, h);
         }
+        if (path === "/api/year/close") {
+          const year = String(body.year ?? "");
+          const goals = await getGoals(n, goalsYear, []);
+          const plan = planClose(goals, year, goalsYear, body.carry);
+          await closeYear(n, plan.carry, plan.next);
+          await setActiveYear(env.PANEL_STORE, plan.next);
+          return json({ ok: true, year: plan.next, carried: plan.carry.length }, 200, h);
+        }
         if (path === "/api/learning/save") {
           const page = await saveLearning(n, body);
           return json({ ok: true, id: page.id }, 200, h);
@@ -149,14 +172,14 @@ export default {
           return json({ ok: true }, 200, h);
         }
         if (path === "/api/goal/save") {
-          const page = await saveGoal(n, today.slice(0, 4), body);
+          const page = await saveGoal(n, goalsYear, body);
           return json({ ok: true, id: page.id }, 200, h);
         }
       }
 
       return json({ error: "Not found" }, 404, h);
     } catch (e) {
-      if (e instanceof BadRequest || e instanceof InvalidGoal || e instanceof InvalidEdit) return json({ error: e.message }, 400, h);
+      if (e instanceof BadRequest || e instanceof InvalidGoal || e instanceof InvalidEdit || e instanceof InvalidClose) return json({ error: e.message }, 400, h);
       if (e instanceof NotionError) return json({ error: `Notion: ${e.message}` }, 502, h);
       return json({ error: "Server error" }, 500, h);
     }

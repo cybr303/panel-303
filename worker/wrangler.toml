@@ -10,3 +10,8 @@ TIMEZONE = "Europe/Madrid"
 #   NOTION_TOKEN    Notion personal access token
 #   PIN             the short PIN that unlocks the panel
 #   SESSION_SECRET  long random string used to sign session tokens
+
+# Small panel settings (the year whose goals are active). Not secret.
+[[kv_namespaces]]
+binding = "PANEL_STORE"
+id = "d8e81e15c1ca4397af58b2f8b82b6939"

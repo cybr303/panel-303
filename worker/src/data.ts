@@ -217,6 +217,18 @@ export interface GoalOut {
 
 export async function getGoals(n: Notion, year: string, habits: HabitOut[]): Promise<GoalOut[]> {
   const rows = await n.query(DS.goals, { filter: { property: "Year", select: { equals: year } } });
+  return buildGoals(rows, habits);
+}
+
+/** Every goal of every year, grouped by year (for the archive). Habit progress is not measured here. */
+export async function getGoalsByYear(n: Notion): Promise<Record<string, GoalOut[]>> {
+  const rows = await n.query(DS.goals);
+  const byYear: Record<string, Page[]> = {};
+  for (const r of rows) (byYear[select(r.properties.Year) ?? "No year"] ??= []).push(r);
+  return Object.fromEntries(Object.entries(byYear).map(([y, rs]) => [y, buildGoals(rs, [])]));
+}
+
+function buildGoals(rows: Page[], habits: HabitOut[]): GoalOut[] {
   const byId = new Map<string, GoalOut & { parent: string | null }>();
   for (const r of rows as Page[]) {
     const p = r.properties;
@@ -282,6 +294,24 @@ const assertGoal = (n: Notion, id: string) => assertRow(n, id, DS.goals, "goal")
 export async function setGoalStatus(n: Notion, id: string, status: string) {
   await assertGoal(n, id);
   await n.updatePage(id, goalProperties({ status }, false));
+}
+
+/** Closes a year: copies the chosen unfinished goals (and their open milestones) into the next year. */
+export async function closeYear(n: Notion, carry: { goal: GoalOut; milestones: GoalOut[] }[], next: string) {
+  let order = 1;
+  for (const { goal, milestones } of carry) {
+    const props = goalProperties({
+      name: goal.name, area: goal.area ?? "", tracking: goal.tracking, habit: goal.habit ?? "", target: goal.target ?? "",
+      current: goal.current ?? "", due: "", status: "In progress", notes: goal.notes,
+    }, true);
+    Object.assign(props, { Year: { select: { name: next } }, Kind: { select: { name: "Goal" } }, Order: { number: order++ } });
+    const page = await n.createPage(DS.goals, props);
+    for (const m of milestones) {
+      const mp = goalProperties({ name: m.name, status: m.status === "In progress" ? "In progress" : "Not started" }, true);
+      Object.assign(mp, { Year: { select: { name: next } }, Kind: { select: { name: "Milestone" } }, Parent: { relation: [{ id: page.id }] }, Order: { number: m.order } });
+      await n.createPage(DS.goals, mp);
+    }
+  }
 }
 
 /** Creates a goal (or a milestone when parentId is given) or updates an existing one. */

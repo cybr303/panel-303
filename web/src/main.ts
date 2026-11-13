@@ -1,5 +1,5 @@
 import "./styles.css";
-import { api, fetchPhoto, getToken, LockedError, setToken, uploadPhoto, type Goal, type Habit, type HabitStats, type LearningItem, type Photo, type PhotoRow, type Summary } from "./api";
+import { api, fetchPhoto, getToken, LockedError, setToken, uploadPhoto, type Archive, type Goal, type Habit, type HabitStats, type LearningItem, type Photo, type PhotoRow, type Summary } from "./api";
 import { WEATHER } from "./config";
 
 // Phone: 3 tabs. Desktop (≥1024px): one dashboard with a sidebar that jumps between sections.
@@ -26,7 +26,11 @@ const state = {
   locked: !getToken(),
   lockError: "",
   showArchived: false,
+  view: "dashboard" as "dashboard" | "archive",
+  archive: null as Archive | null,
+  archiveError: "",
 };
+const goalsYear = (d: Summary) => d.goalsYear ?? d.today.slice(0, 4);
 
 const app = document.getElementById("app")!;
 
@@ -80,6 +84,7 @@ const I = {
   drop: '<path d="M12 3.5s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
   flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .3 1.5 1 2.5 2.5 3-.5-3 0-5.5 0-8z"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
+  box: '<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>',
 };
 const svg = (p: string, sw = 1.7) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 
@@ -207,7 +212,7 @@ function render() {
     </header>`;
   const body = !d
     ? `<section class="glass pad"><div class="empty">${state.loading ? "Loading your day…" : "No data yet. Tap refresh to load it."}</div></section>`
-    : wide ? dashboard(d) : view(d);
+    : state.view === "archive" ? archiveView() : wide ? dashboard(d) : view(d);
   app.innerHTML = wide
     ? `<div class="shell">${sidebar(d)}<main class="main">${head}${body}</main></div>`
     : `<div class="phone">${head}${body}</div>
@@ -222,7 +227,8 @@ function sidebar(d: Summary | null) {
   const h = d ? houseGoal(d) : null;
   return `<aside class="glass side" aria-label="Sections">
     <div class="logo"><span>303</span>Life</div>
-    <nav class="nav">${links.map(([id, ic, label], i) => `<a href="#${id}" data-jump="${id}"${i === 0 ? ' aria-current="page"' : ""}>${svg(I[ic])}${label}</a>`).join("")}</nav>
+    <nav class="nav">${links.map(([id, ic, label], i) => `<a href="#${id}" data-jump="${id}"${i === 0 && state.view === "dashboard" ? ' aria-current="page"' : ""}>${svg(I[ic])}${label}</a>`).join("")}
+      <a href="#archive" data-view="archive"${state.view === "archive" ? ' aria-current="page"' : ""}>${svg(I.box)}Archive</a></nav>
     ${h ? `<div class="side-foot"><b>${esc(h.name)}</b><span class="num">${eur(h.current ?? 0)} saved · ${pct(h.progress ?? 0)}</span><div class="bar"><i style="width:${pct(h.progress ?? 0)}"></i></div></div>` : ""}
   </aside>`;
 }
@@ -241,7 +247,7 @@ function view(d: Summary) {
   switch (state.tab) {
     case "today": return `<div class="stack">${visionSection(d)}${todayCard(d)}${top3Card(d)}${agendaCard(d)}${habitsToday(d)}</div>`;
     case "habits": return `<div class="stack">${habitsCard(d)}</div>`;
-    case "life": return `<div class="stack">${areasSection(d)}${goalsCard(d)}${learningCard(d)}</div>`;
+    case "life": return `<div class="stack">${areasSection(d)}${goalsCard(d)}${learningCard(d)}<button type="button" class="btn ghost wide-btn" data-view="archive">${svg(I.box)} Open the archive</button></div>`;
   }
 }
 
@@ -256,7 +262,7 @@ function visionSection(d: Summary) {
   const h = houseGoal(d), g = goalsDone(d);
   const stats = `<div class="vision-stats">
       ${h ? `<div class="vstat">${ring(h.progress ?? 0, pct(h.progress ?? 0))}<div><b class="num">${eur(h.current ?? 0)}</b><span>of ${eur(h.target!)} for the house</span></div></div>` : ""}
-      ${g && g.total ? `<div class="vstat">${ring(g.done / g.total, `${g.done}/${g.total}`)}<div><b class="num">${g.done} of ${g.total}</b><span>${d.today.slice(0, 4)} goals done</span></div></div>` : ""}
+      ${g && g.total ? `<div class="vstat">${ring(g.done / g.total, `${g.done}/${g.total}`)}<div><b class="num">${g.done} of ${g.total}</b><span>${goalsYear(d)} goals done</span></div></div>` : ""}
     </div>`;
   if (!photos.length) {
     return `<section class="glass vision empty-vision" id="vision"><div class="vision-empty"><b>Your vision board is empty</b><span>Add photos of the life you are building. A new set shows every day.</span><button type="button" class="btn small" data-act="photos">Add photos</button></div>${stats}</section>`;
@@ -412,10 +418,11 @@ function goalsCard(d: Summary) {
   const live = all.filter((g) => g.status !== "Archived");
   const archived = all.length - live.length;
   const shown = state.showArchived ? all : live;
-  return card("glass", "target", `${d.today.slice(0, 4)} goals`, `<button type="button" class="btn small" data-act="goal-new">+ New goal</button>`,
+  return card("glass", "target", `${goalsYear(d)} goals`, `<button type="button" class="btn small" data-act="goal-new">+ New goal</button>`,
     `<div class="meta goals-sum">${live.filter((g) => g.status === "Done").length} of ${live.length} done</div>
      ${shown.length ? shown.map(goalRow).join("") : `<div class="empty">No goals yet. Add your first one.</div>`}
      <div class="goals-foot"><span class="meta">Tap a goal to edit it, a milestone to tick it.</span>
+     <button type="button" class="link-btn" data-act="close-year">Close ${goalsYear(d)}</button>
      ${archived ? `<button type="button" class="link-btn" data-act="toggle-archived">${state.showArchived ? "Hide" : "Show"} archived (${archived})</button>` : ""}</div>`, "goals");
 }
 
@@ -716,6 +723,94 @@ async function uploadFiles(input: HTMLInputElement) {
   if (ok) { photosChanged = true; await loadPhotoGrid(); }
 }
 
+// ---------- archive ----------
+async function openArchive() {
+  state.view = "archive";
+  render();
+  scrollTo(0, 0);
+  await loadArchive();
+}
+
+async function loadArchive() {
+  try { state.archive = await api.archive(); state.archiveError = ""; }
+  catch (e) { if (e instanceof LockedError) { state.locked = true; } else state.archiveError = (e as Error).message; }
+  if (state.view === "archive") render();
+}
+
+function resultPill(g: Goal) {
+  if (g.status === "Done") return `<span class="pill ok">Done</span>`;
+  if (g.status === "Archived") return `<span class="pill">Archived</span>`;
+  return `<span class="pill miss">Not finished</span>`;
+}
+
+function archiveGoalRow(g: Goal, restore = false) {
+  const v = g.status === "Done" ? 1 : g.progress;
+  const ms = g.children.filter((c) => c.kind === "Milestone" && c.status !== "Archived");
+  return `<div class="goal">
+    <div class="goal-t static"><span>${esc(g.name)}${g.area ? `<em class="area-tag">${esc(g.area)}</em>` : ""}</span>${restore ? `<button type="button" class="btn small ghost" data-restore="${g.id}">Restore</button>` : resultPill(g)}</div>
+    ${v !== null && g.status !== "Archived" ? `<div class="bar"><i style="width:${pct(v)}"></i></div>` : ""}
+    ${ms.length ? `<div class="meta">${ms.filter((m) => m.status === "Done").length} of ${ms.length} milestones · ${ms.map((m) => esc(m.name)).join(" · ")}</div>` : ""}
+    ${g.notes ? `<div class="sub">${esc(g.notes)}</div>` : ""}
+  </div>`;
+}
+
+function archiveView() {
+  const a = state.archive;
+  const head = `<section class="glass pad archive-head"><div><div class="eyebrow">Archive</div><h2>Your years</h2>
+      <p class="meta">Every closed year with its goals and how each life area went. Close the current year from Goals.</p></div>
+    <button type="button" class="btn ghost" data-act="archive-back">← Back</button></section>`;
+  if (state.archiveError) return `<div class="stack">${head}<div class="err">${esc(state.archiveError)}</div></div>`;
+  if (!a) return `<div class="stack">${head}<section class="glass pad"><div class="empty">Loading the archive…</div></section></div>`;
+  const years = a.years.map((y) => `<section class="glass pad year-card">
+      <div class="year-h"><div class="year-t">${ring(y.total ? y.done / y.total : 0, `${y.done}/${y.total}`)}<div><h2>${esc(y.year)}</h2><span class="meta">${y.done} of ${y.total} goals done</span></div></div></div>
+      <div class="year-areas">${y.areas.map((ar) => `<div class="year-area"><b>${esc(ar.area)}</b><span class="num">${ar.progress === null ? "–" : pct(ar.progress)}</span>
+        <div class="bar"><i style="width:${ar.progress === null ? 0 : pct(ar.progress)}"></i></div><small class="num">${ar.total ? `${ar.done} of ${ar.total} done` : "No goals"}</small></div>`).join("")}</div>
+      <div class="year-goals">${y.goals.length ? y.goals.map((g) => archiveGoalRow(g)).join("") : `<div class="empty">No goals that year.</div>`}</div>
+    </section>`).join("");
+  const archived = a.archived.length ? `<section class="glass pad"><div class="card-h"><h3>${svg(I.box)}Archived in ${esc(a.active)}</h3><span class="meta">${a.archived.length}</span></div>
+      ${a.archived.map((g) => archiveGoalRow(g, true)).join("")}</section>` : "";
+  const empty = !a.years.length ? `<section class="glass pad"><div class="empty">No closed years yet. At the end of ${esc(a.active)}, use “Close ${esc(a.active)}” in Goals and it will appear here.</div></section>` : "";
+  return `<div class="stack" id="archive">${head}${years}${empty}${archived}</div>`;
+}
+
+// ---------- close the year ----------
+function openCloseYear(d: Summary) {
+  if (!d.goals.ok) return;
+  const year = goalsYear(d), next = String(Number(year) + 1);
+  const goals = d.goals.data.filter((g) => g.kind === "Goal" && g.status !== "Archived");
+  const done = goals.filter((g) => g.status === "Done");
+  const open = goals.filter((g) => g.status !== "Done");
+  drawer.dataset.kind = "close";
+  drawer.innerHTML = `<div class="drawer-bg" data-close></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title">
+    <header class="dr-h"><div><div class="eyebrow">Close the year</div><h2 id="dr-title">Close ${year} and start ${next}</h2></div>
+      <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></header>
+    <form id="close-form" class="dr-body">
+      <div class="close-sum">${ring(goals.length ? done.length / goals.length : 0, `${done.length}/${goals.length}`)}<div><b>${done.length} of ${goals.length} goals done in ${year}</b><span class="meta">${year} moves to the Archive with its results.</span></div></div>
+      ${open.length ? `<fieldset class="fld"><legend>Which unfinished goals continue in ${next}?</legend>
+        <div class="carry">${open.map((g) => `<label class="carry-row"><input type="checkbox" name="carry" value="${g.id}" checked><span><b>${esc(g.name)}</b><small>${esc(g.area ?? "No area")} · ${esc(goalDetail(g))}</small></span></label>`).join("")}</div>
+        <span class="hint">Ticked goals are copied to ${next} with their open milestones. In ${year} they stay as “Not finished”.</span></fieldset>`
+        : `<div class="hint">Every goal of ${year} is done. ${next} starts empty.</div>`}
+      <div class="err" id="c-err" hidden></div>
+    </form>
+    <footer class="dr-f"><button type="button" class="btn ghost" data-close>Not yet</button><button type="submit" form="close-form" class="btn" id="c-save">Close ${year}</button></footer>
+  </aside>`;
+  document.body.classList.add("drawer-open");
+  drawer.querySelector<HTMLFormElement>("#close-form")!.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const carry = [...drawer.querySelectorAll<HTMLInputElement>('input[name="carry"]:checked')].map((x) => x.value);
+    const btn = drawer.querySelector<HTMLButtonElement>("#c-save")!, err = drawer.querySelector<HTMLElement>("#c-err")!;
+    btn.disabled = true;
+    try {
+      const r = await api.closeYear(year, carry);
+      closeEditor();
+      toast(`${year} closed. Welcome to ${r.year}${r.carried ? ` · ${r.carried} goal${r.carried === 1 ? "" : "s"} carried over` : ""}.`);
+      state.archive = null;
+      await refresh();
+    } catch (e2) { err.textContent = (e2 as Error).message; err.hidden = false; btn.disabled = false; }
+  });
+}
+
 function lockView() {
   return `<div class="lock"><form class="glass pad" data-form="pin">
     <div class="logo"><span>303</span>Life</div>
@@ -748,8 +843,11 @@ function bindLock() {
 // ---------- interactions (event delegation) ----------
 app.addEventListener("click", async (e) => {
   const jump = (e.target as HTMLElement).closest<HTMLElement>("[data-jump]");
+  const viewLink = (e.target as HTMLElement).closest<HTMLElement>("[data-view]");
+  if (viewLink) { e.preventDefault(); return openArchive(); }
   if (jump) {
     e.preventDefault();
+    if (state.view !== "dashboard") { state.view = "dashboard"; render(); }
     document.getElementById(jump.dataset.jump!)?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
     app.querySelectorAll("[data-jump]").forEach((a) => a.toggleAttribute("aria-current", a === jump));
     return;
@@ -757,7 +855,15 @@ app.addEventListener("click", async (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>("button");
   if (!el) return;
   if (el.dataset.act === "refresh") return refresh(true);
+  if (el.dataset.act === "archive-back") { state.view = "dashboard"; render(); scrollTo(0, 0); return; }
+  if (el.dataset.restore) {
+    el.setAttribute("disabled", "");
+    try { await api.saveGoal({ id: el.dataset.restore, status: "In progress" }); toast("Restored"); await refresh(); await loadArchive(); }
+    catch (err) { toast((err as Error).message); el.removeAttribute("disabled"); }
+    return;
+  }
   if (el.dataset.tab) {
+    state.view = "dashboard";
     state.tab = el.dataset.tab as Tab;
     store.set(TAB_KEY, state.tab);
     render();
@@ -768,6 +874,7 @@ app.addEventListener("click", async (e) => {
   if (!d) return;
   if (el.dataset.act === "goal-new") return openEditor(null, el.dataset.area ?? "");
   if (el.dataset.act === "photos") return openPhotos();
+  if (el.dataset.act === "close-year") return openCloseYear(d);
   if (el.dataset.act === "learn-new") return openLearning(null);
   if (el.dataset.editLearn) { const it = d.learning?.ok ? d.learning.data.find((x) => x.id === el.dataset.editLearn) : null; if (it) openLearning(it); return; }
   if (el.dataset.editGoal) { const g = findGoal(el.dataset.editGoal); if (g) openEditor(g); return; }

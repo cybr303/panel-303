@@ -36,8 +36,12 @@ export interface LearningItem { id: string; name: string; status: string; type: 
 export interface PhotoRow extends Photo { active: boolean }
 export interface DayCount { date: string; done: number | null }
 export interface HabitStats { days: DayCount[]; monthRate: number; perfectDays: number; bestWeekday: number | null }
+export interface AreaSummary { area: string; done: number; total: number; progress: number | null }
+export interface ArchiveYear { year: string; done: number; total: number; areas: AreaSummary[]; goals: Goal[] }
+export interface Archive { active: string; years: ArchiveYear[]; archived: Goal[] }
 export interface Summary {
   today: string;
+  goalsYear?: string;
   habits: Section<{ habits: Habit[]; hasTodayRow: boolean; weekHasRow?: boolean[]; stats?: HabitStats }>;
   top3: Section<Priority[]>;
   agenda: Section<{ items: AgendaItem[]; upcoming: Upcoming[]; scheduleOk: boolean }>;
@@ -76,6 +80,8 @@ export const api = {
   allPhotos: () => request<{ photos: PhotoRow[] }>("GET", "/api/vision/all"),
   savePhoto: (p: Record<string, unknown>) => request("POST", "/api/vision/save", p),
   saveLearning: (x: Record<string, unknown>) => request<{ ok: true; id: string }>("POST", "/api/learning/save", x),
+  archive: () => request<Archive>("GET", "/api/archive"),
+  closeYear: (year: string, carry: string[]) => request<{ ok: true; year: string; carried: number }>("POST", "/api/year/close", { year, carry }),
   saveGoal: (goal: Record<string, unknown>) => request<{ ok: true; id: string }>("POST", "/api/goal/save", goal),
   setGoal: (id: string, status: string) => request("POST", "/api/goal", { id, status }),
 };
